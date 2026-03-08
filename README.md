@@ -45,11 +45,11 @@ npm start
 
 ## Usage
 
-1. **Setup Wizard** — On first launch, you'll be guided through:
+1. **Setup Wizard** — On first launch, a welcome screen introduces the app, then guides you through:
    - Entering your Discord bot token
    - Choosing an output directory for recordings
    - Selecting a transcription engine
-   - Downloading required binaries (ffmpeg + whisper.cpp)
+   - Downloading required binaries (ffmpeg + whisper.cpp) and the default whisper model
 
 2. **Record** — Select a server and voice channel, join it, then hit Record. A timer shows elapsed time. Use **Stop** to end recording, or **Stop & Transcribe** to immediately begin transcription.
 
@@ -61,7 +61,7 @@ npm start
 
 - **Electron 40** + Electron Forge (webpack-typescript)
 - **React 19** + Redux Toolkit + Tailwind CSS 3
-- **discord.js 14** + @discordjs/voice
+- **discord.js 14** + @discordjs/voice + opusscript (pure JS Opus decoding)
 - **whisper.cpp** (native) / **transformers.js** (ONNX) for transcription
 - Energy-based VAD for speech segmentation
 
