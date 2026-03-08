@@ -132,24 +132,21 @@ export class ModelManager extends EventEmitter {
     const tempPath = destPath + '.tmp';
 
     return new Promise((resolve, reject) => {
-      const file = fs.createWriteStream(tempPath);
       let receivedBytes = 0;
+      let file: fs.WriteStream | null = null;
 
       const makeRequest = (url: string) => {
         const req = https.get(url, (response) => {
           if (response.statusCode === 301 || response.statusCode === 302) {
-            file.close();
-            if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
             makeRequest(response.headers.location!);
             return;
           }
           if (response.statusCode !== 200) {
-            file.close();
-            if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
             reject(new Error(`HTTP ${response.statusCode}`));
             return;
           }
 
+          file = fs.createWriteStream(tempPath);
           const totalBytes = parseInt(response.headers['content-length'] || '0', 10) || model.sizeBytes;
 
           response.on('data', (chunk: Buffer) => {
@@ -161,15 +158,20 @@ export class ModelManager extends EventEmitter {
           response.pipe(file);
 
           file.on('finish', () => {
-            file.close();
+            file!.close();
             fs.renameSync(tempPath, destPath);
             this.emit('downloadComplete', modelId);
             resolve();
           });
+
+          file.on('error', (err) => {
+            if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+            reject(err);
+          });
         });
 
         req.on('error', (err) => {
-          file.close();
+          if (file) file.close();
           if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
           reject(err);
         });
@@ -177,7 +179,7 @@ export class ModelManager extends EventEmitter {
         this.activeDownload = {
           abort: () => {
             req.destroy();
-            file.close();
+            if (file) file.close();
             if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
           },
         };
