@@ -1,0 +1,21 @@
+import type { Configuration } from 'webpack';
+
+import { rules } from './webpack.rules';
+import { plugins } from './webpack.plugins';
+
+export const mainConfig: Configuration = {
+  entry: './src/main/index.ts',
+  module: {
+    rules,
+  },
+  plugins,
+  resolve: {
+    extensions: ['.js', '.ts', '.jsx', '.tsx', '.css', '.json'],
+  },
+  externals: {
+    '@discordjs/opus': 'commonjs2 @discordjs/opus',
+    'opusscript': 'commonjs2 opusscript',
+    'sodium-native': 'commonjs2 sodium-native',
+    'onnxruntime-node': 'commonjs2 onnxruntime-node',
+  },
+};
