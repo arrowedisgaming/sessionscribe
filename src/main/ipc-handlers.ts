@@ -17,6 +17,8 @@
  */
 
 import { ipcMain, dialog, shell, app, BrowserWindow } from 'electron';
+import fs from 'fs';
+import path from 'path';
 import { config, AppConfig } from './config';
 import { sessionManager } from './sessions/session-manager';
 import { discordConnection } from './discord/connection';
@@ -176,6 +178,17 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(ch.SESSIONS_FINALIZE, async (_event, _sessionId: string) => {
     return { success: false, error: 'Not implemented' };
+  });
+
+  ipcMain.handle(ch.SESSIONS_READ_TRANSCRIPT, async (_event, sessionId: string, filename: string) => {
+    try {
+      const sessionDir = sessionManager.getSessionDir(sessionId);
+      const filePath = path.join(sessionDir, filename);
+      const content = fs.readFileSync(filePath, 'utf-8');
+      return { success: true, content };
+    } catch (err) {
+      return { success: false, error: (err as Error).message };
+    }
   });
 
   // ── Models ───────────────────────────────────

@@ -90,6 +90,7 @@ const electronAPI = {
   sessionsDelete: (sessionId: string) => ipcRenderer.invoke(ch.SESSIONS_DELETE, sessionId),
   sessionsGetIncomplete: () => ipcRenderer.invoke(ch.SESSIONS_GET_INCOMPLETE),
   sessionsFinalize: (sessionId: string) => ipcRenderer.invoke(ch.SESSIONS_FINALIZE, sessionId),
+  sessionsReadTranscript: (sessionId: string, filename: string) => ipcRenderer.invoke(ch.SESSIONS_READ_TRANSCRIPT, sessionId, filename),
 
   // Models
   modelsList: () => ipcRenderer.invoke(ch.MODELS_LIST),

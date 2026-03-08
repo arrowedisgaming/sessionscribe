@@ -6,8 +6,9 @@
 
 import React from 'react';
 import { useAppSelector, useAppDispatch } from '../store';
-import { setSelectedGuild, setSelectedChannel, setVoiceChannels, setJoinedChannel, VoiceChannel } from '../store/discordSlice';
+import { setSelectedGuild, setSelectedChannel, setVoiceChannels, setJoinedChannel, setError, VoiceChannel } from '../store/discordSlice';
 import { setRecordingStatus, setSessionId, resetRecording } from '../store/recordingSlice';
+import { setActiveTab } from '../store/appSlice';
 
 function formatTime(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -39,9 +40,12 @@ export const RecordPanel: React.FC = () => {
 
   const handleJoinChannel = async () => {
     if (discord.selectedGuildId && discord.selectedChannelId) {
-      const result = await window.electronAPI.discordJoinChannel(discord.selectedGuildId, discord.selectedChannelId);
-      if ((result as { success: boolean }).success) {
+      const result = await window.electronAPI.discordJoinChannel(discord.selectedGuildId, discord.selectedChannelId) as { success: boolean; error?: string };
+      if (result.success) {
         dispatch(setJoinedChannel(true));
+      } else {
+        console.error('Join channel failed:', result.error);
+        dispatch(setError(result.error || 'Failed to join voice channel'));
       }
     }
   };
@@ -65,6 +69,18 @@ export const RecordPanel: React.FC = () => {
     dispatch(setRecordingStatus('stopping'));
     await window.electronAPI.recordingStop();
     dispatch(resetRecording());
+  };
+
+  const handleStopAndTranscribe = async () => {
+    dispatch(setRecordingStatus('stopping'));
+    const result = await window.electronAPI.recordingStop() as { success: boolean; session?: { id: string }; error?: string };
+    dispatch(resetRecording());
+    if (result.success && result.session) {
+      const engine = await window.electronAPI.configGet('transcriptionEngine') as string;
+      const model = await window.electronAPI.configGet('whisperModel') as string;
+      window.electronAPI.transcriptionStart(result.session.id, { engine, model });
+      dispatch(setActiveTab('sessions'));
+    }
   };
 
   return (
@@ -109,7 +125,7 @@ export const RecordPanel: React.FC = () => {
           >
             <option value="">Select channel...</option>
             {discord.voiceChannels.map((c) => (
-              <option key={c.id} value={c.id}>{c.name} ({c.userCount})</option>
+              <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
         </div>
@@ -163,13 +179,21 @@ export const RecordPanel: React.FC = () => {
               Record
             </button>
           ) : (
-            <button
-              onClick={handleStopRecording}
-              className="flex items-center gap-2 px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-500 text-lg font-medium"
-            >
-              <span className="w-4 h-4 bg-white" />
-              Stop
-            </button>
+            <>
+              <button
+                onClick={handleStopRecording}
+                className="flex items-center gap-2 px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-500 text-lg font-medium"
+              >
+                <span className="w-4 h-4 bg-white" />
+                Stop
+              </button>
+              <button
+                onClick={handleStopAndTranscribe}
+                className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 text-lg font-medium"
+              >
+                Stop &amp; Transcribe
+              </button>
+            </>
           )}
           <span className="text-2xl font-mono text-gray-300">
             {formatTime(recording.elapsedSeconds)}

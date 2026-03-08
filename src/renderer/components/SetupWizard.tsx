@@ -8,11 +8,11 @@ import React, { useState, useEffect } from 'react';
 import { useAppDispatch } from '../store';
 import { setSetupComplete, setFirstRun } from '../store/appSlice';
 
-type WizardStep = 'token' | 'directory' | 'engine' | 'binaries';
+type WizardStep = 'welcome' | 'token' | 'directory' | 'engine' | 'binaries';
 
 export const SetupWizard: React.FC = () => {
   const dispatch = useAppDispatch();
-  const [step, setStep] = useState<WizardStep>('token');
+  const [step, setStep] = useState<WizardStep>('welcome');
   const [token, setToken] = useState('');
   const [outputDir, setOutputDir] = useState('');
   const [engine, setEngine] = useState<'whisper-cpp' | 'transformers-js'>('whisper-cpp');
@@ -87,7 +87,7 @@ export const SetupWizard: React.FC = () => {
     dispatch(setSetupComplete(true));
   };
 
-  const steps: WizardStep[] = ['token', 'directory', 'engine', 'binaries'];
+  const steps: WizardStep[] = ['welcome', 'token', 'directory', 'engine', 'binaries'];
   const stepIndex = steps.indexOf(step);
 
   return (
@@ -111,6 +111,35 @@ export const SetupWizard: React.FC = () => {
             />
           ))}
         </div>
+
+        {step === 'welcome' && (
+          <div className="space-y-6 text-center">
+            <h2 className="text-4xl font-bold text-indigo-400">Session Scribe</h2>
+            <p className="text-lg text-gray-300">
+              Record, transcribe, and archive your TTRPG sessions
+            </p>
+            <ul className="text-left space-y-3 text-gray-300">
+              <li className="flex items-start gap-3">
+                <span className="text-indigo-400 mt-0.5">&#9679;</span>
+                <span>Record Discord voice channels with per-user audio tracks</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="text-indigo-400 mt-0.5">&#9679;</span>
+                <span>AI-powered transcription with whisper.cpp or transformers.js</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="text-indigo-400 mt-0.5">&#9679;</span>
+                <span>Everything runs locally — your audio never leaves your machine</span>
+              </li>
+            </ul>
+            <button
+              onClick={() => setStep('token')}
+              className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 text-lg font-medium"
+            >
+              Get Started
+            </button>
+          </div>
+        )}
 
         {step === 'token' && (
           <div className="space-y-4">

@@ -21,6 +21,7 @@ import { useAppSelector, useAppDispatch } from './store';
 import { setActiveTab, setFirstRun, setSetupComplete, ActiveTab } from './store/appSlice';
 import { setStatus, setConnectedUsers, setGuilds, DiscordStatus, ConnectedUser } from './store/discordSlice';
 import { setElapsedSeconds, setRecordingStatus, setRecordingError } from './store/recordingSlice';
+import { setTranscriptionStatus, setTranscriptionProgress, setTranscriptionError, resetTranscription } from './store/transcriptionSlice';
 import { SetupWizard } from './components/SetupWizard';
 import { RecordPanel } from './components/RecordPanel';
 import { SessionBrowser } from './components/SessionBrowser';
@@ -37,6 +38,7 @@ const tabs: { id: ActiveTab; label: string }[] = [
 export const App: React.FC = () => {
   const dispatch = useAppDispatch();
   const { activeTab, isFirstRun, setupComplete } = useAppSelector((s) => s.app);
+  const transcription = useAppSelector((s) => s.transcription);
 
   useEffect(() => {
     const init = async () => {
@@ -69,6 +71,18 @@ export const App: React.FC = () => {
       window.electronAPI.onRecordingError((error: string) => {
         dispatch(setRecordingError(error));
       }),
+      window.electronAPI.onTranscriptionProgress((progress: unknown) => {
+        const p = progress as { stage: string; percent: number; currentUser?: string };
+        dispatch(setTranscriptionStatus('transcribing'));
+        dispatch(setTranscriptionProgress(p));
+      }),
+      window.electronAPI.onTranscriptionComplete(() => {
+        dispatch(setTranscriptionStatus('complete'));
+        setTimeout(() => dispatch(resetTranscription()), 3000);
+      }),
+      window.electronAPI.onTranscriptionError((error: string) => {
+        dispatch(setTranscriptionError(error));
+      }),
     ];
     return () => unsubs.forEach((unsub) => unsub());
   }, [dispatch]);
@@ -97,6 +111,36 @@ export const App: React.FC = () => {
         <div className="flex-1" />
         <span className="px-4 py-3 text-xs text-gray-600">Session Scribe</span>
       </nav>
+
+      {/* Transcription Progress */}
+      {transcription.status === 'transcribing' && (
+        <div className="bg-gray-800 border-b border-gray-700 px-4 py-2">
+          <div className="flex items-center gap-3 text-sm">
+            <span className="text-indigo-400 font-medium">Transcribing</span>
+            <span className="text-gray-400">{transcription.progress.stage}</span>
+            {transcription.progress.currentUser && (
+              <span className="text-gray-500">({transcription.progress.currentUser})</span>
+            )}
+            <span className="text-gray-400">{transcription.progress.percent}%</span>
+          </div>
+          <div className="w-full bg-gray-700 rounded-full h-1.5 mt-1">
+            <div
+              className="bg-indigo-500 h-1.5 rounded-full transition-all"
+              style={{ width: `${transcription.progress.percent}%` }}
+            />
+          </div>
+        </div>
+      )}
+      {transcription.status === 'complete' && (
+        <div className="bg-green-900/30 border-b border-green-800 px-4 py-2 text-sm text-green-400 font-medium">
+          Transcription complete
+        </div>
+      )}
+      {transcription.status === 'error' && (
+        <div className="bg-red-900/30 border-b border-red-800 px-4 py-2 text-sm text-red-400">
+          Transcription error: {transcription.error}
+        </div>
+      )}
 
       {/* Tab Content */}
       <main className="flex-1 overflow-y-auto">

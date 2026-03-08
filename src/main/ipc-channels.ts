@@ -56,6 +56,7 @@ export const SESSIONS_OPEN_FOLDER = 'sessions:open-folder';
 export const SESSIONS_DELETE = 'sessions:delete';
 export const SESSIONS_GET_INCOMPLETE = 'sessions:get-incomplete';
 export const SESSIONS_FINALIZE = 'sessions:finalize';
+export const SESSIONS_READ_TRANSCRIPT = 'sessions:read-transcript';
 
 // Models
 export const MODELS_LIST = 'models:list';
