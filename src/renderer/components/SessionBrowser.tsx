@@ -8,6 +8,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useAppSelector, useAppDispatch } from '../store';
 import { setSessions, setSelectedSession, setLoading } from '../store/sessionsSlice';
 import { TranscriptViewer } from './TranscriptViewer';
+import { showToast } from './ToastNotification';
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, {
@@ -91,6 +92,16 @@ export const SessionBrowser: React.FC = () => {
   const handleTranscribe = async (sessionId: string) => {
     const engine = await window.electronAPI.configGet('transcriptionEngine') as string;
     const model = await window.electronAPI.configGet('whisperModel') as string;
+
+    if (engine === 'whisper-cpp') {
+      const models = await window.electronAPI.modelsList() as { id: string; status: string }[];
+      const target = models.find((m) => m.id === model);
+      if (!target || (target.status !== 'downloaded' && target.status !== 'bundled')) {
+        showToast(`No whisper model "${model}" downloaded. Go to Settings to download one.`, 'error');
+        return;
+      }
+    }
+
     window.electronAPI.transcriptionStart(sessionId, { engine, model });
   };
 

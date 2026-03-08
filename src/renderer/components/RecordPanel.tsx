@@ -9,6 +9,7 @@ import { useAppSelector, useAppDispatch } from '../store';
 import { setSelectedGuild, setSelectedChannel, setVoiceChannels, setJoinedChannel, setError, VoiceChannel } from '../store/discordSlice';
 import { setRecordingStatus, setSessionId, resetRecording } from '../store/recordingSlice';
 import { setActiveTab } from '../store/appSlice';
+import { showToast } from './ToastNotification';
 
 function formatTime(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -78,6 +79,17 @@ export const RecordPanel: React.FC = () => {
     if (result.success && result.session) {
       const engine = await window.electronAPI.configGet('transcriptionEngine') as string;
       const model = await window.electronAPI.configGet('whisperModel') as string;
+
+      if (engine === 'whisper-cpp') {
+        const models = await window.electronAPI.modelsList() as { id: string; status: string }[];
+        const target = models.find((m) => m.id === model);
+        if (!target || (target.status !== 'downloaded' && target.status !== 'bundled')) {
+          showToast(`No whisper model "${model}" downloaded. Go to Settings to download one.`, 'error');
+          dispatch(setActiveTab('sessions'));
+          return;
+        }
+      }
+
       window.electronAPI.transcriptionStart(result.session.id, { engine, model });
       dispatch(setActiveTab('sessions'));
     }

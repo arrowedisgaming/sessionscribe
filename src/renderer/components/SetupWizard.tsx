@@ -24,6 +24,8 @@ export const SetupWizard: React.FC = () => {
   const [binariesStage, setBinariesStage] = useState('');
   const [binariesPercent, setBinariesPercent] = useState(0);
   const [binariesError, setBinariesError] = useState('');
+  const [modelReady, setModelReady] = useState(false);
+  const [downloadPhase, setDownloadPhase] = useState<'idle' | 'binaries' | 'model' | 'done'>('idle');
 
   const handleTestToken = async () => {
     if (!token.trim()) return;
@@ -59,25 +61,59 @@ export const SetupWizard: React.FC = () => {
         const status = s as { ffmpeg: boolean; whisper: boolean };
         if (status.ffmpeg && status.whisper) setBinariesReady(true);
       });
-      const unsub = window.electronAPI.onBinariesProgress((prog: unknown) => {
+      // Check if default model already exists
+      window.electronAPI.modelsList().then((models: unknown) => {
+        const list = models as { id: string; status: string }[];
+        const base = list.find((m) => m.id === 'base');
+        if (base && (base.status === 'downloaded' || base.status === 'bundled')) {
+          setModelReady(true);
+        }
+      });
+      const unsubBinaries = window.electronAPI.onBinariesProgress((prog: unknown) => {
         const p = prog as { stage: string; percent: number };
         setBinariesStage(p.stage);
         setBinariesPercent(p.percent);
       });
-      return () => { unsub(); };
+      const unsubModel = window.electronAPI.onModelsDownloadProgress((prog: unknown) => {
+        const p = prog as { progress: number };
+        setBinariesStage('Downloading whisper model (base)...');
+        setBinariesPercent(p.progress);
+      });
+      return () => { unsubBinaries(); unsubModel(); };
     }
   }, [step]);
 
   const handleDownloadBinaries = async () => {
     setBinariesDownloading(true);
     setBinariesError('');
+    setDownloadPhase('binaries');
+
     const result = await window.electronAPI.binariesDownload() as { success: boolean; error?: string };
-    setBinariesDownloading(false);
-    if (result.success) {
-      setBinariesReady(true);
-    } else {
+    if (!result.success) {
+      setBinariesDownloading(false);
+      setDownloadPhase('idle');
       setBinariesError(result.error || 'Download failed');
+      return;
     }
+    setBinariesReady(true);
+
+    // If whisper-cpp selected and no model yet, download the default base model
+    if (engine === 'whisper-cpp' && !modelReady) {
+      setDownloadPhase('model');
+      setBinariesStage('Downloading whisper model (base)...');
+      setBinariesPercent(0);
+      const modelResult = await window.electronAPI.modelsDownload('base') as { success: boolean; error?: string };
+      if (!modelResult.success) {
+        setBinariesDownloading(false);
+        setDownloadPhase('idle');
+        setBinariesError(modelResult.error || 'Model download failed');
+        return;
+      }
+      setModelReady(true);
+    }
+
+    setDownloadPhase('done');
+    setBinariesDownloading(false);
   };
 
   const handleFinish = async () => {
@@ -86,6 +122,9 @@ export const SetupWizard: React.FC = () => {
     dispatch(setFirstRun(false));
     dispatch(setSetupComplete(true));
   };
+
+  // For whisper-cpp, both binaries and model must be ready; for transformers-js, just binaries
+  const allReady = binariesReady && (engine !== 'whisper-cpp' || modelReady);
 
   const steps: WizardStep[] = ['welcome', 'token', 'directory', 'engine', 'binaries'];
   const stepIndex = steps.indexOf(step);
@@ -282,11 +321,11 @@ export const SetupWizard: React.FC = () => {
           <div className="space-y-4">
             <h2 className="text-xl font-semibold text-gray-100">Download Required Tools</h2>
             <p className="text-gray-400 text-sm">
-              Session Scribe needs ffmpeg (audio processing) and whisper.cpp (transcription).
-              These will be downloaded to your app data folder (~100 MB total).
+              Session Scribe needs ffmpeg (audio processing), whisper.cpp (transcription binary),
+              and a whisper model. These will be downloaded to your app data folder (~250 MB total).
             </p>
-            {binariesReady ? (
-              <p className="text-green-400 font-medium">All tools are ready!</p>
+            {allReady ? (
+              <p className="text-green-400 font-medium">All tools and models are ready!</p>
             ) : binariesDownloading ? (
               <div className="space-y-2">
                 <p className="text-gray-300">{binariesStage}</p>
@@ -312,7 +351,7 @@ export const SetupWizard: React.FC = () => {
               </button>
               <button
                 onClick={handleFinish}
-                disabled={!binariesReady}
+                disabled={!allReady}
                 className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 disabled:opacity-50"
               >
                 Finish Setup
