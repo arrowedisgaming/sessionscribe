@@ -114,9 +114,13 @@ export class SessionRecorder extends EventEmitter {
       const rawPath = path.join(audioDir, `${userId}.raw`);
       const flacPath = path.join(audioDir, `${userId}.flac`);
 
-      // Concatenate all PCM chunks
+      // Append remaining PCM chunks (flushToDisk may have already written earlier data)
       const pcmBuffer = Buffer.concat(chunks);
-      fs.writeFileSync(rawPath, pcmBuffer);
+      if (fs.existsSync(rawPath)) {
+        fs.appendFileSync(rawPath, pcmBuffer);
+      } else {
+        fs.writeFileSync(rawPath, pcmBuffer);
+      }
 
       // Convert to FLAC
       try {

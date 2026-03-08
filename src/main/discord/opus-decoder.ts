@@ -32,13 +32,30 @@ try {
 
 export class OpusDecoder {
   private encoder: { decode: (buf: Buffer) => Buffer; delete?: () => void };
+  private outputChannels: number;
 
-  constructor(sampleRate: number, channels: number) {
-    this.encoder = new OpusEncoderClass(sampleRate, channels);
+  constructor(sampleRate: number, outputChannels: number) {
+    // Discord sends stereo Opus — always decode as 2 channels
+    this.encoder = new OpusEncoderClass(sampleRate, 2);
+    this.outputChannels = outputChannels;
   }
 
   decode(opusPacket: Buffer): Buffer {
-    return this.encoder.decode(opusPacket);
+    const pcm = this.encoder.decode(opusPacket);
+
+    // If caller wants mono, downmix stereo → mono by averaging L+R
+    if (this.outputChannels === 1) {
+      const sampleCount = pcm.length / 4; // 2 bytes/sample * 2 channels
+      const mono = Buffer.alloc(sampleCount * 2);
+      for (let i = 0; i < sampleCount; i++) {
+        const left = pcm.readInt16LE(i * 4);
+        const right = pcm.readInt16LE(i * 4 + 2);
+        mono.writeInt16LE(Math.round((left + right) / 2), i * 2);
+      }
+      return mono;
+    }
+
+    return pcm;
   }
 
   destroy(): void {
