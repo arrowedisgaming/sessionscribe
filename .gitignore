@@ -91,6 +91,10 @@ typings/
 # Electron-Forge
 out/
 
+# Claude
+.claude/
+CLAUDE.md
+
 # Session Scribe
 resources/bin/
 resources/models/
