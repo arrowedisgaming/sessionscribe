@@ -248,7 +248,8 @@ export const SetupWizard: React.FC = () => {
               </button>
               <button
                 onClick={() => setStep('engine')}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500"
+                disabled={!outputDir}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 disabled:opacity-50"
               >
                 Next
               </button>

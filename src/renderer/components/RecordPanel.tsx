@@ -7,7 +7,7 @@
 import React from 'react';
 import { useAppSelector, useAppDispatch } from '../store';
 import { setSelectedGuild, setSelectedChannel, setVoiceChannels, setJoinedChannel, setError, VoiceChannel } from '../store/discordSlice';
-import { setRecordingStatus, setSessionId, resetRecording } from '../store/recordingSlice';
+import { setRecordingStatus, setSessionId, setRecordingError, resetRecording } from '../store/recordingSlice';
 import { setActiveTab } from '../store/appSlice';
 import { showToast } from './ToastNotification';
 
@@ -63,13 +63,22 @@ export const RecordPanel: React.FC = () => {
     if (result.success) {
       dispatch(setRecordingStatus('recording'));
       dispatch(setSessionId(result.sessionId));
+    } else {
+      dispatch(setRecordingError(result.error || 'Failed to start recording'));
+      showToast(result.error || 'Failed to start recording', 'error');
     }
   };
 
   const handleStopRecording = async () => {
     dispatch(setRecordingStatus('stopping'));
-    await window.electronAPI.recordingStop();
-    dispatch(resetRecording());
+    const result = await window.electronAPI.recordingStop() as { success: boolean; error?: string };
+    if (result.success) {
+      dispatch(resetRecording());
+    } else {
+      dispatch(setRecordingStatus('recording'));
+      dispatch(setRecordingError(result.error || 'Failed to stop recording'));
+      showToast(result.error || 'Failed to stop recording', 'error');
+    }
   };
 
   const handleStopAndTranscribe = async () => {

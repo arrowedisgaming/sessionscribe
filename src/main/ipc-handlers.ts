@@ -192,12 +192,22 @@ export function registerIpcHandlers(): void {
     return { success: false, error: 'Not implemented' };
   });
 
-  ipcMain.handle(ch.SESSIONS_DELETE, async (_event, _sessionId: string) => {
-    return { success: false, error: 'Not implemented' };
+  ipcMain.handle(ch.SESSIONS_DELETE, async (_event, sessionId: string) => {
+    try {
+      sessionManager.deleteSession(sessionId);
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: (err as Error).message };
+    }
   });
 
-  ipcMain.handle(ch.SESSIONS_FINALIZE, async (_event, _sessionId: string) => {
-    return { success: false, error: 'Not implemented' };
+  ipcMain.handle(ch.SESSIONS_FINALIZE, async (_event, sessionId: string) => {
+    try {
+      sessionManager.finalizeSession(sessionId);
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: (err as Error).message };
+    }
   });
 
   ipcMain.handle(ch.SESSIONS_READ_TRANSCRIPT, async (_event, sessionId: string, filename: string) => {

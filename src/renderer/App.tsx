@@ -28,6 +28,7 @@ import { SessionBrowser } from './components/SessionBrowser';
 import { SettingsPanel } from './components/SettingsPanel';
 import { RecoveryDialog } from './components/RecoveryDialog';
 import { ToastContainer } from './components/ToastNotification';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 const tabs: { id: ActiveTab; label: string }[] = [
   { id: 'record', label: 'Record' },
@@ -109,7 +110,7 @@ export const App: React.FC = () => {
           </button>
         ))}
         <div className="flex-1" />
-        <span className="px-4 py-3 text-xs text-gray-600">Session Scribe</span>
+        <span className="px-4 py-3 text-xs text-gray-600">Session Scribe v0.2.0-alpha</span>
       </nav>
 
       {/* Transcription Progress */}
@@ -144,9 +145,11 @@ export const App: React.FC = () => {
 
       {/* Tab Content */}
       <main className="flex-1 overflow-y-auto">
-        {activeTab === 'record' && <RecordPanel />}
-        {activeTab === 'sessions' && <SessionBrowser />}
-        {activeTab === 'settings' && <SettingsPanel />}
+        <ErrorBoundary>
+          {activeTab === 'record' && <RecordPanel />}
+          {activeTab === 'sessions' && <SessionBrowser />}
+          {activeTab === 'settings' && <SettingsPanel />}
+        </ErrorBoundary>
       </main>
       <RecoveryDialog />
       <ToastContainer />

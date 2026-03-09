@@ -135,6 +135,33 @@ export class SessionManager {
   getIncompleteSessions(): SessionMetadata[] {
     return this.listSessions().filter((s) => s.status === 'incomplete');
   }
+
+  deleteSession(sessionId: string): void {
+    this.validateSessionId(sessionId);
+    const sessionDir = this.getSessionDir(sessionId);
+    if (!fs.existsSync(sessionDir)) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    fs.rmSync(sessionDir, { recursive: true, force: true });
+  }
+
+  finalizeSession(sessionId: string): void {
+    this.validateSessionId(sessionId);
+    const metadata = this.readMetadata(sessionId);
+    if (!metadata) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    metadata.status = 'recorded';
+    if (!metadata.stoppedAt) {
+      metadata.stoppedAt = new Date().toISOString();
+    }
+    if (metadata.startedAt && metadata.stoppedAt) {
+      metadata.durationSeconds = Math.round(
+        (new Date(metadata.stoppedAt).getTime() - new Date(metadata.startedAt).getTime()) / 1000
+      );
+    }
+    this.writeMetadata(metadata);
+  }
 }
 
 export const sessionManager = new SessionManager();

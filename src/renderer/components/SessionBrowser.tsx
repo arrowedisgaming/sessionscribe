@@ -69,6 +69,19 @@ export const SessionBrowser: React.FC = () => {
     }
   }, [transcriptionStatus, loadSessions]);
 
+  const handleDeleteSession = async (sessionId: string) => {
+    if (!confirm('Delete this session? This removes all audio files and transcripts permanently.')) {
+      return;
+    }
+    const result = await window.electronAPI.sessionsDelete(sessionId) as { success: boolean; error?: string };
+    if (result.success) {
+      showToast('Session deleted', 'success');
+      loadSessions();
+    } else {
+      showToast(result.error || 'Failed to delete session', 'error');
+    }
+  };
+
   const handleOpenFolder = async (sessionId: string) => {
     await window.electronAPI.sessionsOpenFolder(sessionId);
   };
@@ -195,6 +208,12 @@ export const SessionBrowser: React.FC = () => {
                   className="px-3 py-1 text-sm bg-gray-700 text-gray-300 rounded hover:bg-gray-600"
                 >
                   Open Folder
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleDeleteSession(session.id); }}
+                  className="px-3 py-1 text-sm bg-red-900/50 text-red-400 rounded hover:bg-red-800/50"
+                >
+                  Delete
                 </button>
               </div>
             </div>
