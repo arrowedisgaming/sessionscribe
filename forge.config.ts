@@ -3,10 +3,12 @@ import { MakerSquirrel } from '@electron-forge/maker-squirrel';
 import { MakerZIP } from '@electron-forge/maker-zip';
 import { MakerDeb } from '@electron-forge/maker-deb';
 import { MakerRpm } from '@electron-forge/maker-rpm';
+import { MakerDMG } from '@electron-forge/maker-dmg';
 import { AutoUnpackNativesPlugin } from '@electron-forge/plugin-auto-unpack-natives';
 import { WebpackPlugin } from '@electron-forge/plugin-webpack';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
+import { PublisherGithub } from '@electron-forge/publisher-github';
 
 import { mainConfig } from './webpack.main.config';
 import { rendererConfig } from './webpack.renderer.config';
@@ -15,13 +17,37 @@ const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
     name: 'Session Scribe',
+    executableName: 'session-scribe',
   },
   rebuildConfig: {},
   makers: [
     new MakerSquirrel({}),
-    new MakerZIP({}, ['darwin']),
-    new MakerRpm({}),
-    new MakerDeb({}),
+    new MakerZIP({}),
+    new MakerDMG({
+      format: 'ULFO',
+    }),
+    new MakerRpm({
+      options: {
+        homepage: 'https://github.com/arrowedisgaming/sessionscribe',
+        categories: ['AudioVideo', 'Audio', 'Utility'],
+      },
+    }),
+    new MakerDeb({
+      options: {
+        maintainer: 'Arrowed',
+        homepage: 'https://github.com/arrowedisgaming/sessionscribe',
+        categories: ['AudioVideo', 'Audio', 'Utility'],
+      },
+    }),
+  ],
+  publishers: [
+    new PublisherGithub({
+      repository: {
+        owner: 'arrowedisgaming',
+        name: 'sessionscribe',
+      },
+      draft: true,
+    }),
   ],
   plugins: [
     new AutoUnpackNativesPlugin({}),

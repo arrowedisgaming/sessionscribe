@@ -4,6 +4,18 @@
 
 An Electron desktop app that records Discord voice channels, transcribes them locally with AI, and outputs versioned markdown transcripts. Built for tabletop RPG groups who want to preserve their sessions.
 
+## Download
+
+| Platform | Download |
+|----------|----------|
+| macOS (Apple Silicon) | [`.dmg`](https://github.com/arrowedisgaming/sessionscribe/releases/latest) |
+| macOS (Intel) | [`.dmg`](https://github.com/arrowedisgaming/sessionscribe/releases/latest) |
+| Windows | [`.exe`](https://github.com/arrowedisgaming/sessionscribe/releases/latest) |
+| Linux (Debian/Ubuntu) | [`.deb`](https://github.com/arrowedisgaming/sessionscribe/releases/latest) |
+| Linux (Fedora/RHEL) | [`.rpm`](https://github.com/arrowedisgaming/sessionscribe/releases/latest) |
+
+See all downloads on the [Releases page](https://github.com/arrowedisgaming/sessionscribe/releases/latest).
+
 ## Features
 
 - **Per-user audio recording** — Joins your Discord voice channel via a bot and captures each participant as a separate audio track
@@ -15,11 +27,6 @@ An Electron desktop app that records Discord voice channels, transcribes them lo
 ## Privacy
 
 Session Scribe is fully local. Audio files are saved to a directory you choose, and transcription runs on your CPU using local models. No data is sent to any cloud service. The only network connection is to Discord (to join your voice channel) and optionally to download models/binaries on first setup.
-
-## Prerequisites
-
-- **Node.js** 18+ and npm
-- **A Discord bot token** — see setup guide below
 
 ## Discord Bot Setup
 
@@ -34,15 +41,6 @@ Session Scribe is fully local. Audio files are saved to a directory you choose, 
    - Bot Permissions: `Connect`, `Speak`, `Use Voice Activity`
 6. Copy the generated URL and open it in your browser to invite the bot to your server
 
-## Installation
-
-```bash
-git clone https://github.com/your-username/session-scribe.git
-cd session-scribe
-npm install
-npm start
-```
-
 ## Usage
 
 1. **Setup Wizard** — On first launch, a welcome screen introduces the app, then guides you through:
@@ -56,6 +54,34 @@ npm start
 3. **Transcribe** — Transcription runs locally using your chosen engine. A progress bar shows the current stage. Completed transcripts appear as versioned markdown files in the session folder.
 
 4. **Browse** — The Sessions tab lists all recordings grouped by campaign. Click **View Transcript** to read in-app, or **Open Folder** to access raw audio files.
+
+## Development
+
+### Prerequisites
+
+- **Node.js** 18+ and npm
+- **A Discord bot token** — see setup guide above
+
+### Installation
+
+```bash
+git clone https://github.com/arrowedisgaming/sessionscribe.git
+cd sessionscribe
+npm install
+npm start
+```
+
+### Building
+
+Build installers for your current platform:
+
+```bash
+npm run make              # default arch
+npm run make:x64          # x64 only
+npm run make:arm64        # arm64 only
+```
+
+Output goes to `out/make/`.
 
 ## Tech Stack
 
