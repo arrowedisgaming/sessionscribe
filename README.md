@@ -2,7 +2,7 @@
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
-An Electron desktop app that records Discord voice channels, transcribes them locally with AI, and outputs versioned markdown transcripts. Built for tabletop RPG groups who want to preserve their sessions.
+An Electron desktop app that records Discord voice channels, transcribes them locally with open source AI [Whisper](https://github.com/openai/whisper), and outputs versioned Markdown transcripts. Built for tabletop RPG groups who want to preserve their sessions.
 
 ## Download
 
@@ -19,14 +19,14 @@ See all downloads on the [Releases page](https://github.com/arrowedisgaming/sess
 ## Features
 
 - **Per-user audio recording** — Joins your Discord voice channel via a bot and captures each participant as a separate audio track
-- **Local AI transcription** — Choose between whisper.cpp (fast native binary) or transformers.js (pure JavaScript, no external binary needed)
+- **Local AI transcription** — Choose between [Whisper](https://github.com/openai/whisper) (fast native binary) or transformers.js (pure JavaScript, no external binary needed)
 - **Speaker-attributed transcripts** — Output is a markdown file with speaker labels and timestamps
 - **Session management** — Browse past sessions, re-transcribe with different engines/models, view transcripts in-app
 - **Privacy-first** — All audio processing and transcription happens on your machine. Nothing is uploaded anywhere.
 
 ## Privacy
 
-Session Scribe is fully local. Audio files are saved to a directory you choose, and transcription runs on your CPU using local models. No data is sent to any cloud service. The only network connection is to Discord (to join your voice channel) and optionally to download models/binaries on first setup.
+Session Scribe is fully local. Audio files are saved to a directory you choose, and transcription runs on your CPU using local models. No data is sent to any cloud service. The only network connection is to Discord (to join your voice channel) and to download speech recognition models on first setup.
 
 ## Discord Bot Setup
 
