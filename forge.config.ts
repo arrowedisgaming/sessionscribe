@@ -20,11 +20,7 @@ const config: ForgeConfig = {
     executableName: 'session-scribe',
   },
   rebuildConfig: {
-    ignore: [
-      /@discordjs\/opus/,
-      /sodium-native/,
-      /onnxruntime-node/,
-    ],
+    onlyModules: [],
   },
   makers: [
     new MakerSquirrel({}),
