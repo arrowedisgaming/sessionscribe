@@ -19,7 +19,13 @@ const config: ForgeConfig = {
     name: 'Session Scribe',
     executableName: 'session-scribe',
   },
-  rebuildConfig: {},
+  rebuildConfig: {
+    ignore: [
+      /@discordjs\/opus/,
+      /sodium-native/,
+      /onnxruntime-node/,
+    ],
+  },
   makers: [
     new MakerSquirrel({}),
     new MakerZIP({}),
