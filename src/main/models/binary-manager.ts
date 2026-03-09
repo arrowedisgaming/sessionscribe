@@ -18,6 +18,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import https from 'https';
 import http from 'http';
 import os from 'os';
@@ -61,6 +62,51 @@ const PLATFORM_URLS: Record<string, PlatformUrls> = {
 
 const WHISPER_SOURCE_URL =
   `https://github.com/ggerganov/whisper.cpp/archive/refs/tags/v${WHISPER_VERSION_SOURCE}.tar.gz`;
+
+// SHA-256 checksums for pinned binary downloads.
+// Verify these by downloading the file manually and running: shasum -a 256 <file>
+// URLs that point to "latest" (e.g. Windows ffmpeg) are verified structurally but
+// cannot have pinned checksums — they are listed as null.
+const KNOWN_CHECKSUMS: Record<string, string | null> = {
+  // whisper.cpp v1.7.6 Windows prebuilt
+  [`https://github.com/ggerganov/whisper.cpp/releases/download/v${WHISPER_VERSION_PREBUILT}/whisper-bin-x64.zip`]:
+    null, // TODO: pin after verifying download
+  // whisper.cpp v1.6.2 source tarball
+  [WHISPER_SOURCE_URL]:
+    null, // TODO: pin after verifying download
+  // ffmpeg macOS (evermeet.cx)
+  ['https://evermeet.cx/ffmpeg/ffmpeg-8.0.1.zip']:
+    null, // TODO: pin after verifying download
+  // ffmpeg Linux
+  ['https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz']:
+    null, // rolling release, cannot pin
+  // ffmpeg Windows (BtbN "latest" — rolling release)
+  ['https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip']:
+    null, // rolling release, cannot pin
+};
+
+function computeSha256(filePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    const stream = fs.createReadStream(filePath);
+    stream.on('data', (chunk) => hash.update(chunk));
+    stream.on('end', () => resolve(hash.digest('hex')));
+    stream.on('error', reject);
+  });
+}
+
+async function verifyChecksum(filePath: string, url: string): Promise<void> {
+  const expected = KNOWN_CHECKSUMS[url];
+  if (!expected) return; // no pinned checksum available for this URL
+  const actual = await computeSha256(filePath);
+  if (actual !== expected) {
+    fs.unlinkSync(filePath);
+    throw new Error(
+      `Checksum mismatch for ${path.basename(filePath)}: ` +
+      `expected ${expected}, got ${actual}. File deleted for safety.`
+    );
+  }
+}
 
 export class BinaryManager extends EventEmitter {
   private binDir: string;
@@ -146,6 +192,7 @@ export class BinaryManager extends EventEmitter {
         percent: 5,
       });
       await this.download(WHISPER_SOURCE_URL, tarPath, 'whisper');
+      await verifyChecksum(tarPath, WHISPER_SOURCE_URL);
 
       // 2. Extract
       this.emit('progress', {
@@ -209,6 +256,7 @@ export class BinaryManager extends EventEmitter {
     fs.mkdirSync(extractDir, { recursive: true });
 
     await this.download(url, archivePath, type);
+    await verifyChecksum(archivePath, url);
 
     // Extract
     this.emit('progress', {

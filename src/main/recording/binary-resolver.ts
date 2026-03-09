@@ -24,6 +24,7 @@ export function resolveBinaryPath(binaryName: string): string {
   const devPath = path.join(app.getAppPath(), 'resources', 'bin', platformDir, execName);
   if (fs.existsSync(devPath)) return devPath;
 
-  // 4. System PATH fallback
-  return execName;
+  throw new Error(
+    `Binary "${binaryName}" not found. Please download it via Settings > Binaries.`
+  );
 }

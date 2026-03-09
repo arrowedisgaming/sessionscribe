@@ -84,7 +84,14 @@ export class SessionManager {
     return metadata;
   }
 
+  private validateSessionId(sessionId: string): void {
+    if (!/^[\w\-]+$/.test(sessionId)) {
+      throw new Error('Invalid session ID');
+    }
+  }
+
   getSessionDir(sessionId: string): string {
+    this.validateSessionId(sessionId);
     return path.join(this.getOutputDir(), sessionId);
   }
 

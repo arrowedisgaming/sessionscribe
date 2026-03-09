@@ -4,7 +4,7 @@
  * License: GPL-3.0-or-later
  */
 
-import { execSync } from 'child_process';
+import fs from 'fs';
 import { EventEmitter } from 'events';
 
 const WARN_THRESHOLD = 1024 * 1024 * 1024;  // 1 GB
@@ -45,14 +45,7 @@ export class DiskMonitor extends EventEmitter {
   }
 
   private getFreeSpace(): number {
-    if (process.platform === 'win32') {
-      const output = execSync(`wmic logicaldisk where "DeviceID='${this.outputDir[0]}:'" get FreeSpace /format:value`, { encoding: 'utf-8' });
-      const match = output.match(/FreeSpace=(\d+)/);
-      return match ? parseInt(match[1]) : Infinity;
-    } else {
-      const output = execSync(`df -k "${this.outputDir}" | tail -1`, { encoding: 'utf-8' });
-      const parts = output.trim().split(/\s+/);
-      return parseInt(parts[3]) * 1024;
-    }
+    const stats = fs.statfsSync(this.outputDir);
+    return stats.bavail * stats.bsize;
   }
 }

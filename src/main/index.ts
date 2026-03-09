@@ -16,7 +16,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { app, BrowserWindow, nativeImage } from 'electron';
+import { app, BrowserWindow, nativeImage, session } from 'electron';
 import * as path from 'path';
 import { registerIpcHandlers } from './ipc-handlers';
 
@@ -49,6 +49,7 @@ const createWindow = (): void => {
       preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
     },
   });
 
@@ -64,6 +65,18 @@ const createWindow = (): void => {
 };
 
 app.on('ready', () => {
+  // Set Content Security Policy — stricter in production, allows eval for webpack HMR in dev
+  const isDev = process.env.NODE_ENV === 'development';
+  const scriptSrc = isDev ? "script-src 'self' 'unsafe-eval'" : "script-src 'self'";
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [`default-src 'self'; ${scriptSrc}; style-src 'self' 'unsafe-inline'`],
+      },
+    });
+  });
+
   registerIpcHandlers();
   createWindow();
 });

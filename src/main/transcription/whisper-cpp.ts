@@ -65,20 +65,21 @@ export class WhisperCppEngine implements TranscriptionEngine {
     const allSegments: TranscriptionSegment[] = [];
 
     for (const batch of batches) {
-      // Extract chunk via ffmpeg
-      const chunkPath = path.join(os.tmpdir(), `whisper_chunk_${Date.now()}.wav`);
-      await this.extractChunk(wavPath, chunkPath, batch.start, batch.end - batch.start);
+      // Create a secure unique temp directory for this chunk
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'whisper-'));
+      const chunkPath = path.join(tmpDir, 'chunk.wav');
+      try {
+        await this.extractChunk(wavPath, chunkPath, batch.start, batch.end - batch.start);
 
-      // Run whisper.cpp
-      const segments = await this.runWhisper(whisperPath, modelPath, chunkPath, {
-        ...options,
-        offsetSeconds: batch.start,
-      });
+        const segments = await this.runWhisper(whisperPath, modelPath, chunkPath, {
+          ...options,
+          offsetSeconds: batch.start,
+        });
 
-      allSegments.push(...segments);
-
-      // Cleanup chunk
-      if (fs.existsSync(chunkPath)) fs.unlinkSync(chunkPath);
+        allSegments.push(...segments);
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
     }
 
     this.cleanup(wavPath);
@@ -136,10 +137,14 @@ export class WhisperCppEngine implements TranscriptionEngine {
     ];
 
     if (options.language) {
+      if (!/^[a-z]{2}$/.test(options.language)) {
+        throw new Error('Invalid language code: must be ISO 639-1 (e.g. "en")');
+      }
       args.push('-l', options.language);
     }
     if (options.prompt) {
-      args.push('--prompt', options.prompt);
+      const sanitizedPrompt = options.prompt.slice(0, 500);
+      args.push('--prompt', sanitizedPrompt);
     }
 
     return new Promise((resolve, reject) => {

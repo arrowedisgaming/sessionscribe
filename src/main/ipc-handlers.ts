@@ -41,12 +41,32 @@ export function registerIpcHandlers(): void {
     return config.get(key as keyof AppConfig);
   });
 
+  const CONFIG_ALLOWED_KEYS: Record<string, string> = {
+    discordToken: 'string',
+    outputDir: 'string',
+    transcriptionEngine: 'string',
+    whisperModel: 'string',
+    campaigns: 'object',
+    displayNameOverrides: 'object',
+    maxDurationMinutes: 'number',
+    isFirstRun: 'boolean',
+    autoTranscribe: 'boolean',
+  };
+
   ipcMain.handle(ch.CONFIG_SET, (_event, key: string, value: unknown) => {
+    const expectedType = CONFIG_ALLOWED_KEYS[key];
+    if (!expectedType) {
+      return { success: false, error: `Unknown config key: ${key}` };
+    }
+    if (typeof value !== expectedType) {
+      return { success: false, error: `Invalid type for ${key}: expected ${expectedType}` };
+    }
     config.set(key as keyof AppConfig, value as never);
   });
 
   ipcMain.handle(ch.CONFIG_GET_ALL, () => {
-    return config.store;
+    const { discordToken: _token, ...safeConfig } = config.store;
+    return safeConfig;
   });
 
   // ── Discord ─────────────────────────────────
@@ -183,8 +203,13 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(ch.SESSIONS_READ_TRANSCRIPT, async (_event, sessionId: string, filename: string) => {
     try {
       const sessionDir = sessionManager.getSessionDir(sessionId);
-      const filePath = path.join(sessionDir, filename);
-      const content = fs.readFileSync(filePath, 'utf-8');
+      const basename = path.basename(filename);
+      const filePath = path.join(sessionDir, basename);
+      const resolved = path.resolve(filePath);
+      if (!resolved.startsWith(path.resolve(sessionDir) + path.sep) && resolved !== path.resolve(sessionDir)) {
+        return { success: false, error: 'Invalid filename' };
+      }
+      const content = fs.readFileSync(resolved, 'utf-8');
       return { success: true, content };
     } catch (err) {
       return { success: false, error: (err as Error).message };
@@ -232,7 +257,16 @@ export function registerIpcHandlers(): void {
   });
 
   ipcMain.handle(ch.APP_OPEN_EXTERNAL, async (_event, url: string) => {
-    await shell.openExternal(url);
+    try {
+      const parsed = new URL(url);
+      if (!['http:', 'https:'].includes(parsed.protocol)) {
+        return { success: false, error: 'Invalid URL scheme' };
+      }
+      await shell.openExternal(url);
+      return { success: true };
+    } catch {
+      return { success: false, error: 'Invalid URL' };
+    }
   });
 
   // ── Binaries ─────────────────────────────────
