@@ -70,6 +70,62 @@ async function copyPackageWithDeps(
   }
 }
 
+/**
+ * Remove prebuild directories that don't match the current platform/arch.
+ * Prevents `strip` failures in RPM builds when it encounters non-native .node files.
+ */
+async function pruneNonTargetPrebuilds(buildModules: string): Promise<void> {
+  const platform = process.platform;  // 'linux', 'darwin', 'win32'
+  const arch = process.arch;          // 'x64', 'arm64'
+  const target = `${platform}-${arch}`;
+
+  console.log(`[prune] Target platform: ${target}`);
+
+  // sodium-native/prebuilds/{platform}-{arch}/
+  const sodiumPrebuilds = path.join(buildModules, 'sodium-native', 'prebuilds');
+  if (await fs.pathExists(sodiumPrebuilds)) {
+    const dirs = await fs.readdir(sodiumPrebuilds);
+    for (const dir of dirs) {
+      if (dir !== target) {
+        await fs.remove(path.join(sodiumPrebuilds, dir));
+        console.log(`  [prune] sodium-native/prebuilds/${dir}`);
+      }
+    }
+  }
+
+  // onnxruntime-node/bin/napi-v6/{platform}/{arch}/
+  const onnxBin = path.join(buildModules, 'onnxruntime-node', 'bin');
+  if (await fs.pathExists(onnxBin)) {
+    // Walk napi-v* directories
+    const napiDirs = await fs.readdir(onnxBin);
+    for (const napiDir of napiDirs) {
+      const napiPath = path.join(onnxBin, napiDir);
+      if (!(await fs.stat(napiPath)).isDirectory()) continue;
+
+      // Remove non-matching platform directories
+      const platformDirs = await fs.readdir(napiPath);
+      for (const plat of platformDirs) {
+        if (plat !== platform) {
+          await fs.remove(path.join(napiPath, plat));
+          console.log(`  [prune] onnxruntime-node/bin/${napiDir}/${plat}/`);
+          continue;
+        }
+        // Within matching platform, remove non-matching arch directories
+        const archPath = path.join(napiPath, plat);
+        if ((await fs.stat(archPath)).isDirectory()) {
+          const archDirs = await fs.readdir(archPath);
+          for (const a of archDirs) {
+            if (a !== arch) {
+              await fs.remove(path.join(archPath, a));
+              console.log(`  [prune] onnxruntime-node/bin/${napiDir}/${plat}/${a}/`);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
@@ -95,7 +151,11 @@ const config: ForgeConfig = {
         await copyPackageWithDeps(pkg, projectModules, buildModules, copied);
       }
 
-      console.log(`[packageAfterCopy] Done — copied ${copied.size} packages.\n`);
+      console.log(`[packageAfterCopy] Done — copied ${copied.size} packages.`);
+
+      // Prune cross-architecture prebuilds so `strip` doesn't choke on them
+      await pruneNonTargetPrebuilds(buildModules);
+      console.log('[packageAfterCopy] Prebuild pruning complete.\n');
     },
   },
   makers: [
