@@ -16,7 +16,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, nativeImage } from 'electron';
+import * as path from 'path';
 import { registerIpcHandlers } from './ipc-handlers';
 
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
@@ -32,18 +33,28 @@ if (!gotTheLock) {
 }
 
 const createWindow = (): void => {
+  const iconPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'icon.png')
+    : path.join(app.getAppPath(), '..', '..', 'assets', 'icon.png');
+  const icon = nativeImage.createFromPath(iconPath);
+
   const mainWindow = new BrowserWindow({
     height: 700,
     width: 1000,
     minWidth: 800,
     minHeight: 600,
     title: 'Session Scribe',
+    icon,
     webPreferences: {
       preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
+
+  if (process.platform === 'darwin' && !app.isPackaged) {
+    app.dock.setIcon(icon);
+  }
 
   mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
 

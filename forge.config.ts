@@ -75,6 +75,7 @@ const config: ForgeConfig = {
     asar: true,
     name: 'Session Scribe',
     executableName: 'session-scribe',
+    icon: './assets/icon',
   },
   rebuildConfig: {
     onlyModules: [],
