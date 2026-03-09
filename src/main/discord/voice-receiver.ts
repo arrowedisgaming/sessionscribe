@@ -17,6 +17,7 @@
  */
 
 import { VoiceConnection, EndBehaviorType } from '@discordjs/voice';
+import { Readable } from 'stream';
 import { EventEmitter } from 'events';
 import { OpusDecoder } from './opus-decoder';
 
@@ -32,6 +33,7 @@ export interface UserStream {
   decoder: OpusDecoder;
   lastPacketTimestamp: number;
   pcmChunks: Buffer[];
+  activeOpusStream: Readable | null;
 }
 
 export class VoiceStreamManager extends EventEmitter {
@@ -52,6 +54,10 @@ export class VoiceStreamManager extends EventEmitter {
       }
 
       const userStream = this.streams.get(userId)!;
+
+      // If an opus stream is already active, skip — listeners are already attached
+      if (userStream.activeOpusStream) return;
+
       const now = Date.now();
 
       // Insert silence frames for the gap since last packet
@@ -73,6 +79,7 @@ export class VoiceStreamManager extends EventEmitter {
       const opusStream = receiver.subscribe(userId, {
         end: { behavior: EndBehaviorType.AfterSilence, duration: 1000 },
       });
+      userStream.activeOpusStream = opusStream;
 
       opusStream.on('data', (chunk: Buffer) => {
         try {
@@ -84,7 +91,8 @@ export class VoiceStreamManager extends EventEmitter {
         }
       });
 
-      opusStream.on('end', () => {
+      opusStream.on('close', () => {
+        userStream.activeOpusStream = null;
         userStream.lastPacketTimestamp = Date.now();
       });
     });
@@ -130,6 +138,7 @@ export class VoiceStreamManager extends EventEmitter {
       decoder: new OpusDecoder(SAMPLE_RATE, CHANNELS),
       lastPacketTimestamp: 0,
       pcmChunks: [],
+      activeOpusStream: null,
     };
     this.streams.set(userId, stream);
     this.emit('userStreamStarted', userId);

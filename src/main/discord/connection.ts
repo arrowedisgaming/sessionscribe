@@ -23,6 +23,7 @@ import {
   VoiceConnectionStatus,
   entersState,
   getVoiceConnection,
+  generateDependencyReport,
 } from '@discordjs/voice';
 import { EventEmitter } from 'events';
 
@@ -68,10 +69,12 @@ export class DiscordConnectionManager extends EventEmitter {
       intents: [GatewayIntentBits.Guilds],
     });
     try {
-      await testClient.login(token);
-      await new Promise<void>((resolve) => {
-        testClient.once('ready', () => resolve());
+      const readyPromise = new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Connection timed out')), 10_000);
+        testClient.once('ready', () => { clearTimeout(timeout); resolve(); });
       });
+      await testClient.login(token);
+      await readyPromise;
       testClient.destroy();
       return { success: true };
     } catch (err) {
@@ -107,10 +110,12 @@ export class DiscordConnectionManager extends EventEmitter {
     });
 
     try {
-      await this.client.login(token);
-      await new Promise<void>((resolve) => {
-        this.client!.once('ready', () => resolve());
+      const readyPromise = new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Connection timed out')), 10_000);
+        this.client!.once('ready', () => { clearTimeout(timeout); resolve(); });
       });
+      await this.client.login(token);
+      await readyPromise;
       this.setStatus('connected');
       return { success: true };
     } catch (err) {
@@ -171,6 +176,8 @@ export class DiscordConnectionManager extends EventEmitter {
     if (!channel) return { success: false, error: 'Channel not found' };
 
     try {
+      console.log('[Voice] Dependency report:\n' + generateDependencyReport());
+
       if (this.connection) {
         this.connection.destroy();
       }
@@ -183,7 +190,42 @@ export class DiscordConnectionManager extends EventEmitter {
         selfMute: true,
       });
 
-      await entersState(this.connection, VoiceConnectionStatus.Ready, 10_000);
+      // Log all state transitions for debugging
+      this.connection.on('stateChange', (oldState: any, newState: any) => {
+        console.log(`[Voice] ${oldState.status} → ${newState.status}`);
+        if (newState.networking) {
+          newState.networking.on('stateChange', (nOld: any, nNew: any) => {
+            console.log(`[Voice/Net] ${nOld.code ?? '?'} → ${nNew.code ?? '?'}`);
+          });
+          newState.networking.on('close', (code: number) => {
+            console.log(`[Voice/Net] WebSocket closed with code: ${code}`);
+          });
+          newState.networking.on('error', (err: Error) => {
+            console.error('[Voice/Net] error:', err.message);
+          });
+        }
+      });
+      this.connection.on('error', (err: Error) => {
+        console.error('[Voice] connection error:', err.message);
+      });
+
+      // Handle disconnects — try to recover instead of giving up
+      this.connection.on(VoiceConnectionStatus.Disconnected, async () => {
+        try {
+          // Wait for the connection to attempt reconnection
+          await Promise.race([
+            entersState(this.connection!, VoiceConnectionStatus.Signalling, 5_000),
+            entersState(this.connection!, VoiceConnectionStatus.Connecting, 5_000),
+          ]);
+        } catch {
+          // Genuine disconnect — destroy if still around
+          if (this.connection) {
+            this.connection.destroy();
+          }
+        }
+      });
+
+      await entersState(this.connection, VoiceConnectionStatus.Ready, 30_000);
 
       this.currentGuildId = guildId;
       this.currentChannelId = channelId;

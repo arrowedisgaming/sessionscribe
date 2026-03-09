@@ -14,6 +14,7 @@ export const mainConfig: Configuration = {
   },
   externals: {
     '@discordjs/opus': 'commonjs2 @discordjs/opus',
+    '@discordjs/voice': 'commonjs2 @discordjs/voice',
     'opusscript': 'commonjs2 opusscript',
     'sodium-native': 'commonjs2 sodium-native',
     'onnxruntime-node': 'commonjs2 onnxruntime-node',
