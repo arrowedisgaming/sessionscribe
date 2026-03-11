@@ -128,7 +128,14 @@ export class BinaryManager extends EventEmitter {
   }
 
   hasWhisper(): boolean {
-    return fs.existsSync(this.getWhisperPath());
+    if (!fs.existsSync(this.getWhisperPath())) return false;
+    // On Windows, whisper-cli.exe needs companion DLLs. If none are present
+    // (e.g. upgraded from a version that only copied the exe), re-download.
+    if (process.platform === 'win32') {
+      const dlls = fs.readdirSync(this.binDir).filter(f => f.toLowerCase().endsWith('.dll'));
+      if (dlls.length === 0) return false;
+    }
+    return true;
   }
 
   areBinariesReady(): boolean {
