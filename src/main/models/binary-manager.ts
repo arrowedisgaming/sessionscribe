@@ -265,9 +265,16 @@ export class BinaryManager extends EventEmitter {
       percent: 80,
     });
     if (ext === 'zip') {
-      execSync(`unzip -o "${archivePath}" -d "${extractDir}"`, {
-        stdio: 'pipe',
-      });
+      if (process.platform === 'win32') {
+        execSync(
+          `powershell -NoProfile -Command "Expand-Archive -Path '${archivePath}' -DestinationPath '${extractDir}' -Force"`,
+          { stdio: 'pipe' }
+        );
+      } else {
+        execSync(`unzip -o "${archivePath}" -d "${extractDir}"`, {
+          stdio: 'pipe',
+        });
+      }
     } else {
       execSync(
         `tar xf "${archivePath}" -C "${extractDir}" --strip-components=1`,
