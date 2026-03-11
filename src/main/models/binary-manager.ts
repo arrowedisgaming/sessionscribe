@@ -290,18 +290,47 @@ export class BinaryManager extends EventEmitter {
         fs.chmodSync(this.getFFmpegPath(), 0o755);
       }
     } else {
-      const found =
-        this.findBinary(extractDir, 'whisper-cli') ||
-        this.findBinary(extractDir, 'main');
-      if (found) {
-        fs.copyFileSync(found, this.getWhisperPath());
-        fs.chmodSync(this.getWhisperPath(), 0o755);
+      if (process.platform === 'win32') {
+        // Windows prebuilt zip contains whisper-cli.exe + companion DLLs
+        // (e.g. ggml.dll, whisper.dll). Copy all to binDir so the exe can
+        // find its DLLs at runtime — otherwise we get STATUS_DLL_NOT_FOUND.
+        this.copyBinariesFromExtract(extractDir, this.binDir);
+      } else {
+        const found =
+          this.findBinary(extractDir, 'whisper-cli') ||
+          this.findBinary(extractDir, 'main');
+        if (found) {
+          fs.copyFileSync(found, this.getWhisperPath());
+          fs.chmodSync(this.getWhisperPath(), 0o755);
+        }
       }
     }
 
     // Cleanup
     fs.unlinkSync(archivePath);
     fs.rmSync(extractDir, { recursive: true, force: true });
+  }
+
+  /**
+   * Copy all .exe and .dll files from srcDir (recursively) into destDir flat.
+   * Used on Windows to preserve companion DLLs alongside the whisper-cli exe.
+   */
+  private copyBinariesFromExtract(srcDir: string, destDir: string): void {
+    const copyRecursive = (dir: string): void => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          copyRecursive(fullPath);
+        } else if (entry.isFile()) {
+          const lower = entry.name.toLowerCase();
+          if (lower.endsWith('.exe') || lower.endsWith('.dll')) {
+            const dest = path.join(destDir, entry.name);
+            fs.copyFileSync(fullPath, dest);
+          }
+        }
+      }
+    };
+    copyRecursive(srcDir);
   }
 
   private findBinary(dir: string, name: string): string | null {
