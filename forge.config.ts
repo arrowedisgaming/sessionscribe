@@ -59,11 +59,16 @@ async function copyPackageWithDeps(
   await fs.copy(src, dest, { overwrite: true });
   console.log(`  [copy] ${packageName}`);
 
-  // Read its production dependencies and copy those too
+  // Read its production + optional dependencies and copy those too.
+  // Optional deps include platform-specific native binaries (e.g. @snazzah/davey-win32-x64-msvc)
+  // that npm installs for the current OS — these must be in the packaged app.
   const pkgJsonPath = path.join(src, 'package.json');
   if (await fs.pathExists(pkgJsonPath)) {
     const pkgJson = await fs.readJson(pkgJsonPath);
-    const deps = Object.keys(pkgJson.dependencies || {});
+    const deps = [
+      ...Object.keys(pkgJson.dependencies || {}),
+      ...Object.keys(pkgJson.optionalDependencies || {}),
+    ];
     for (const dep of deps) {
       await copyPackageWithDeps(dep, projectModules, buildModules, copied);
     }

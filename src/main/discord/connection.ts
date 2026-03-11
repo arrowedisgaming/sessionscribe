@@ -163,6 +163,27 @@ export class DiscordConnectionManager extends EventEmitter {
     }));
   }
 
+  private checkDaveAvailability(): { available: boolean; error?: string } {
+    try {
+      require('@snazzah/davey');
+      return { available: true };
+    } catch (err) {
+      const msg = (err as Error).message || '';
+      console.error('[DAVE] Failed to load @snazzah/davey:', msg);
+      if (msg.includes('native binding')) {
+        return {
+          available: false,
+          error: 'DAVE protocol library missing native binding for this platform. '
+            + 'Try: delete node_modules and package-lock.json, then run npm install',
+        };
+      }
+      return {
+        available: false,
+        error: 'DAVE protocol library failed to load: ' + msg,
+      };
+    }
+  }
+
   async joinChannel(
     guildId: string,
     channelId: string
@@ -174,6 +195,12 @@ export class DiscordConnectionManager extends EventEmitter {
 
     const channel = guild.channels.cache.get(channelId);
     if (!channel) return { success: false, error: 'Channel not found' };
+
+    // Pre-flight: verify DAVE protocol is available (mandatory since 2025)
+    const daveCheck = this.checkDaveAvailability();
+    if (!daveCheck.available) {
+      return { success: false, error: daveCheck.error };
+    }
 
     try {
       console.log('[Voice] Dependency report:\n' + generateDependencyReport());
@@ -190,6 +217,9 @@ export class DiscordConnectionManager extends EventEmitter {
         selfMute: true,
       });
 
+      // Track close codes for diagnostics
+      let lastCloseCode: number | null = null;
+
       // Log all state transitions for debugging
       this.connection.on('stateChange', (oldState: any, newState: any) => {
         console.log(`[Voice] ${oldState.status} → ${newState.status}`);
@@ -199,6 +229,7 @@ export class DiscordConnectionManager extends EventEmitter {
           });
           newState.networking.on('close', (code: number) => {
             console.log(`[Voice/Net] WebSocket closed with code: ${code}`);
+            lastCloseCode = code;
           });
           newState.networking.on('error', (err: Error) => {
             console.error('[Voice/Net] error:', err.message);
@@ -234,7 +265,16 @@ export class DiscordConnectionManager extends EventEmitter {
 
       return { success: true };
     } catch (err) {
-      return { success: false, error: (err as Error).message };
+      const msg = (err as Error).message || '';
+      // Provide actionable error for common failure modes
+      if (msg === 'The operation was aborted') {
+        return {
+          success: false,
+          error: 'Voice connection timed out. Check that your network allows UDP traffic '
+            + 'and that no firewall is blocking Electron.',
+        };
+      }
+      return { success: false, error: msg };
     }
   }
 
