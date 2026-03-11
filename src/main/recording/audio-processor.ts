@@ -24,15 +24,18 @@ const SAMPLE_RATE = 48000;
 const CHANNELS = 1;
 
 export class AudioProcessor {
-  private ffmpegPath: string;
+  private ffmpegPath: string | null = null;
 
-  constructor() {
-    this.ffmpegPath = resolveBinaryPath('ffmpeg');
+  private getFfmpegPath(): string {
+    if (!this.ffmpegPath) {
+      this.ffmpegPath = resolveBinaryPath('ffmpeg');
+    }
+    return this.ffmpegPath;
   }
 
   async pcmToFlac(inputPath: string, outputPath: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      const proc = spawn(this.ffmpegPath, [
+      const proc = spawn(this.getFfmpegPath(), [
         '-f', 's16le',
         '-ar', String(SAMPLE_RATE),
         '-ac', String(CHANNELS),
@@ -75,7 +78,7 @@ export class AudioProcessor {
 
       const filterComplex = `amix=inputs=${inputPaths.length}:duration=longest`;
 
-      const proc = spawn(this.ffmpegPath, [
+      const proc = spawn(this.getFfmpegPath(), [
         ...inputs,
         '-filter_complex', filterComplex,
         '-y',

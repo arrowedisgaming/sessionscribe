@@ -1,7 +1,7 @@
 {
   "name": "session-scribe",
   "productName": "Session Scribe",
-  "version": "0.2.5-alpha",
+  "version": "0.2.6-alpha",
   "description": "TTRPG session recording and transcription for Discord",
   "main": ".webpack/main",
   "private": true,
