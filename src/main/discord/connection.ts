@@ -54,6 +54,17 @@ export class DiscordConnectionManager extends EventEmitter {
   private _status: ConnectionStatus = 'disconnected';
   private currentGuildId: string | null = null;
   private currentChannelId: string | null = null;
+  private voiceStateHandler: ((oldState: VoiceState, newState: VoiceState) => void) | null = null;
+  private connectionStateHandler: ((oldState: any, newState: any) => void) | null = null;
+  private connectionErrorHandler: ((err: Error) => void) | null = null;
+  private connectionDisconnectedHandler: (() => void) | null = null;
+  private currentNetworking: any = null;
+  private networkingStateHandler: ((nOld: any, nNew: any) => void) | null = null;
+  private networkingCloseHandler: ((code: number) => void) | null = null;
+  private networkingErrorHandler: ((err: Error) => void) | null = null;
+  private reconnectAttempt = 0;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+  private maxReconnectAttempts = 5;
 
   get status(): ConnectionStatus {
     return this._status;
@@ -98,7 +109,7 @@ export class DiscordConnectionManager extends EventEmitter {
       ],
     });
 
-    this.client.on('voiceStateUpdate', (oldState: VoiceState, newState: VoiceState) => {
+    this.voiceStateHandler = (oldState: VoiceState, newState: VoiceState) => {
       if (this.currentChannelId) {
         if (
           oldState.channelId === this.currentChannelId ||
@@ -107,7 +118,8 @@ export class DiscordConnectionManager extends EventEmitter {
           this.emitUsersUpdate();
         }
       }
-    });
+    };
+    this.client.on('voiceStateUpdate', this.voiceStateHandler);
 
     try {
       const readyPromise = new Promise<void>((resolve, reject) => {
@@ -125,11 +137,17 @@ export class DiscordConnectionManager extends EventEmitter {
   }
 
   async disconnect(): Promise<void> {
+    this.clearReconnectTimer();
+    this.removeConnectionListeners();
     if (this.connection) {
       this.connection.destroy();
       this.connection = null;
     }
     if (this.client) {
+      if (this.voiceStateHandler) {
+        this.client.removeListener('voiceStateUpdate', this.voiceStateHandler);
+        this.voiceStateHandler = null;
+      }
       this.client.destroy();
       this.client = null;
     }
@@ -217,43 +235,77 @@ export class DiscordConnectionManager extends EventEmitter {
         selfMute: true,
       });
 
-      // Track close codes for diagnostics
-      let lastCloseCode: number | null = null;
+      // Remove any existing connection listeners before adding new ones
+      this.removeConnectionListeners();
+
+      // Networking listener management helpers
+      this.networkingStateHandler = (nOld: any, nNew: any) => {
+        console.log(`[Voice/Net] ${nOld.code ?? '?'} → ${nNew.code ?? '?'}`);
+      };
+      this.networkingCloseHandler = (code: number) => {
+        console.log(`[Voice/Net] WebSocket closed with code: ${code}`);
+      };
+      this.networkingErrorHandler = (err: Error) => {
+        console.error('[Voice/Net] error:', err.message);
+      };
 
       // Log all state transitions for debugging
-      this.connection.on('stateChange', (oldState: any, newState: any) => {
+      this.connectionStateHandler = (oldState: any, newState: any) => {
         console.log(`[Voice] ${oldState.status} → ${newState.status}`);
-        if (newState.networking) {
-          newState.networking.on('stateChange', (nOld: any, nNew: any) => {
-            console.log(`[Voice/Net] ${nOld.code ?? '?'} → ${nNew.code ?? '?'}`);
-          });
-          newState.networking.on('close', (code: number) => {
-            console.log(`[Voice/Net] WebSocket closed with code: ${code}`);
-            lastCloseCode = code;
-          });
-          newState.networking.on('error', (err: Error) => {
-            console.error('[Voice/Net] error:', err.message);
-          });
+        if (newState.networking && newState.networking !== this.currentNetworking) {
+          // Remove listeners from previous networking object
+          this.removeNetworkingListeners();
+          this.currentNetworking = newState.networking;
+          this.currentNetworking.on('stateChange', this.networkingStateHandler!);
+          this.currentNetworking.on('close', this.networkingCloseHandler!);
+          this.currentNetworking.on('error', this.networkingErrorHandler!);
         }
-      });
-      this.connection.on('error', (err: Error) => {
-        console.error('[Voice] connection error:', err.message);
-      });
+      };
+      this.connection.on('stateChange', this.connectionStateHandler);
 
-      // Handle disconnects — try to recover instead of giving up
-      this.connection.on(VoiceConnectionStatus.Disconnected, async () => {
+      this.connectionErrorHandler = (err: Error) => {
+        console.error('[Voice] connection error:', err.message);
+      };
+      this.connection.on('error', this.connectionErrorHandler);
+
+      // Handle disconnects — try to recover with exponential backoff
+      this.connectionDisconnectedHandler = async () => {
         try {
           // Wait for the connection to attempt reconnection
           await Promise.race([
             entersState(this.connection!, VoiceConnectionStatus.Signalling, 5_000),
             entersState(this.connection!, VoiceConnectionStatus.Connecting, 5_000),
           ]);
+          // Reset reconnect counter on successful recovery
+          this.reconnectAttempt = 0;
         } catch {
-          // Genuine disconnect — destroy if still around
-          if (this.connection) {
-            this.connection.destroy();
+          if (this.reconnectAttempt < this.maxReconnectAttempts) {
+            const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempt), 60_000);
+            console.log(`[Voice] Reconnect attempt ${this.reconnectAttempt + 1}/${this.maxReconnectAttempts} in ${delay}ms`);
+            this.reconnectAttempt++;
+            this.reconnectTimer = setTimeout(() => {
+              try {
+                if (this.connection) {
+                  this.connection.rejoin();
+                }
+              } catch {
+                // Connection may have been destroyed
+              }
+            }, delay);
+          } else {
+            // Exhausted reconnection attempts — destroy
+            console.error('[Voice] Exhausted reconnection attempts, destroying connection');
+            if (this.connection) {
+              this.connection.destroy();
+            }
           }
         }
+      };
+      this.connection.on(VoiceConnectionStatus.Disconnected, this.connectionDisconnectedHandler);
+
+      // Reset reconnect counter when ready
+      this.connection.on(VoiceConnectionStatus.Ready, () => {
+        this.reconnectAttempt = 0;
       });
 
       await entersState(this.connection, VoiceConnectionStatus.Ready, 30_000);
@@ -279,6 +331,8 @@ export class DiscordConnectionManager extends EventEmitter {
   }
 
   async leaveChannel(): Promise<void> {
+    this.clearReconnectTimer();
+    this.removeConnectionListeners();
     if (this.connection) {
       this.connection.destroy();
       this.connection = null;
@@ -325,6 +379,35 @@ export class DiscordConnectionManager extends EventEmitter {
 
   getCurrentGuildId(): string | null {
     return this.currentGuildId;
+  }
+
+  private removeNetworkingListeners(): void {
+    if (this.currentNetworking) {
+      if (this.networkingStateHandler) this.currentNetworking.removeListener('stateChange', this.networkingStateHandler);
+      if (this.networkingCloseHandler) this.currentNetworking.removeListener('close', this.networkingCloseHandler);
+      if (this.networkingErrorHandler) this.currentNetworking.removeListener('error', this.networkingErrorHandler);
+      this.currentNetworking = null;
+    }
+  }
+
+  private removeConnectionListeners(): void {
+    this.removeNetworkingListeners();
+    if (this.connection) {
+      if (this.connectionStateHandler) this.connection.removeListener('stateChange', this.connectionStateHandler);
+      if (this.connectionErrorHandler) this.connection.removeListener('error', this.connectionErrorHandler);
+      if (this.connectionDisconnectedHandler) this.connection.removeListener(VoiceConnectionStatus.Disconnected, this.connectionDisconnectedHandler);
+    }
+    this.connectionStateHandler = null;
+    this.connectionErrorHandler = null;
+    this.connectionDisconnectedHandler = null;
+  }
+
+  private clearReconnectTimer(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.reconnectAttempt = 0;
   }
 
   private emitUsersUpdate() {

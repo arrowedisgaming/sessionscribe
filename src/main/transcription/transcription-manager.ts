@@ -49,7 +49,7 @@ export class TranscriptionManager extends EventEmitter {
 
   async transcribe(request: TranscriptionRequest): Promise<void> {
     this.cancelled = false;
-    const session = sessionManager.readMetadata(request.sessionId);
+    const session = await sessionManager.readMetadata(request.sessionId);
     if (!session) throw new Error(`Session not found: ${request.sessionId}`);
 
     const engineName = request.engine || config.get('transcriptionEngine');
@@ -62,11 +62,13 @@ export class TranscriptionManager extends EventEmitter {
 
     // Update session status
     session.status = 'transcribing';
-    sessionManager.writeMetadata(session);
+    await sessionManager.writeMetadata(session);
 
     const userSegments: { userId: string; displayName: string; segments: TranscriptionSegment[] }[] = [];
     const totalUsers = session.users.filter((u) => u.flacFile).length;
     let processedUsers = 0;
+
+    const userErrors: Record<string, string> = {};
 
     try {
       for (const user of session.users) {
@@ -84,19 +86,36 @@ export class TranscriptionManager extends EventEmitter {
           currentUser: user.displayName,
         });
 
-        const prompt = request.vocabularyHints?.join(', ') || undefined;
-        const segments = await engine.transcribe(audioPath, {
-          language: request.language,
-          prompt,
-        });
+        try {
+          const prompt = request.vocabularyHints?.join(', ') || undefined;
+          const segments = await engine.transcribe(audioPath, {
+            language: request.language,
+            prompt,
+          });
 
-        userSegments.push({
-          userId: user.userId,
-          displayName: user.displayName,
-          segments,
-        });
+          userSegments.push({
+            userId: user.userId,
+            displayName: user.displayName,
+            segments,
+          });
+        } catch (userErr) {
+          const errMsg = (userErr as Error).message;
+          console.error(`Transcription failed for ${user.displayName}:`, errMsg);
+          userErrors[user.userId] = errMsg;
+          this.emit('progress', {
+            stage: `Warning: failed to transcribe ${user.displayName}`,
+            percent: Math.round((processedUsers / totalUsers) * 100),
+            warning: errMsg,
+          });
+        }
 
         processedUsers++;
+      }
+
+      // If no users produced output at all, that's a hard failure
+      if (userSegments.length === 0 && totalUsers > 0) {
+        throw new Error('All user transcriptions failed: ' +
+          Object.entries(userErrors).map(([id, err]) => `${id}: ${err}`).join('; '));
       }
 
       this.emit('progress', {
@@ -123,14 +142,14 @@ export class TranscriptionManager extends EventEmitter {
       );
       session.transcripts.push(transcriptInfo);
       session.status = 'complete';
-      sessionManager.writeMetadata(session);
+      await sessionManager.writeMetadata(session);
 
       this.emit('progress', { stage: 'Complete', percent: 100 });
       this.emit('complete', { sessionId: session.id, filename });
     } catch (err) {
       session.status = 'error';
       session.error = (err as Error).message;
-      sessionManager.writeMetadata(session);
+      await sessionManager.writeMetadata(session);
       throw err;
     }
   }

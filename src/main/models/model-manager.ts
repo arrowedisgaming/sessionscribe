@@ -137,7 +137,7 @@ export class ModelManager extends EventEmitter {
 
       const makeRequest = (url: string) => {
         const req = https.get(url, (response) => {
-          if (response.statusCode === 301 || response.statusCode === 302) {
+          if ([301, 302, 307, 308].includes(response.statusCode!)) {
             makeRequest(response.headers.location!);
             return;
           }

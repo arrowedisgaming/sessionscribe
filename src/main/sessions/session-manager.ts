@@ -17,6 +17,7 @@
  */
 
 import fs from 'fs';
+import fsp from 'fs/promises';
 import path from 'path';
 import { config } from '../config';
 
@@ -53,21 +54,21 @@ export interface SessionMetadata {
 }
 
 export class SessionManager {
-  private getOutputDir(): string {
+  getOutputDir(): string {
     return config.get('outputDir');
   }
 
-  createSession(
+  async createSession(
     guildName: string,
     channelName: string,
     campaign?: string
-  ): SessionMetadata {
+  ): Promise<SessionMetadata> {
     const now = new Date();
     const id = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const sessionDir = path.join(this.getOutputDir(), id);
 
-    fs.mkdirSync(sessionDir, { recursive: true });
-    fs.mkdirSync(path.join(sessionDir, 'audio'), { recursive: true });
+    await fsp.mkdir(sessionDir, { recursive: true });
+    await fsp.mkdir(path.join(sessionDir, 'audio'), { recursive: true });
 
     const metadata: SessionMetadata = {
       id,
@@ -80,7 +81,7 @@ export class SessionManager {
       transcripts: [],
     };
 
-    this.writeMetadata(metadata);
+    await this.writeMetadata(metadata);
     return metadata;
   }
 
@@ -99,55 +100,66 @@ export class SessionManager {
     return path.join(this.getSessionDir(sessionId), 'audio');
   }
 
-  readMetadata(sessionId: string): SessionMetadata | null {
+  async readMetadata(sessionId: string): Promise<SessionMetadata | null> {
     const metaPath = path.join(this.getSessionDir(sessionId), 'session.json');
-    if (!fs.existsSync(metaPath)) return null;
-    return JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+    try {
+      const data = await fsp.readFile(metaPath, 'utf-8');
+      return JSON.parse(data);
+    } catch {
+      return null;
+    }
   }
 
-  writeMetadata(metadata: SessionMetadata): void {
+  async writeMetadata(metadata: SessionMetadata): Promise<void> {
     const metaPath = path.join(
       this.getSessionDir(metadata.id),
       'session.json'
     );
-    fs.writeFileSync(metaPath, JSON.stringify(metadata, null, 2), 'utf-8');
+    const tmpPath = metaPath + '.tmp';
+    await fsp.writeFile(tmpPath, JSON.stringify(metadata, null, 2), 'utf-8');
+    await fsp.rename(tmpPath, metaPath);
   }
 
-  listSessions(): SessionMetadata[] {
+  async listSessions(): Promise<SessionMetadata[]> {
     const outputDir = this.getOutputDir();
-    if (!fs.existsSync(outputDir)) return [];
+    try {
+      const entries = await fsp.readdir(outputDir, { withFileTypes: true });
+      const sessions: SessionMetadata[] = [];
 
-    const entries = fs.readdirSync(outputDir, { withFileTypes: true });
-    const sessions: SessionMetadata[] = [];
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const meta = await this.readMetadata(entry.name);
+        if (meta) sessions.push(meta);
+      }
 
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const meta = this.readMetadata(entry.name);
-      if (meta) sessions.push(meta);
+      return sessions.sort(
+        (a, b) =>
+          new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
+      );
+    } catch {
+      return [];
     }
-
-    return sessions.sort(
-      (a, b) =>
-        new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
-    );
   }
 
-  getIncompleteSessions(): SessionMetadata[] {
-    return this.listSessions().filter((s) => s.status === 'incomplete');
+  async getIncompleteSessions(): Promise<SessionMetadata[]> {
+    const sessions = await this.listSessions();
+    return sessions.filter((s) => s.status === 'incomplete');
   }
 
-  deleteSession(sessionId: string): void {
+  async deleteSession(sessionId: string): Promise<void> {
     this.validateSessionId(sessionId);
     const sessionDir = this.getSessionDir(sessionId);
-    if (!fs.existsSync(sessionDir)) {
+    try {
+      await fsp.access(sessionDir);
+    } catch {
       throw new Error(`Session not found: ${sessionId}`);
     }
-    fs.rmSync(sessionDir, { recursive: true, force: true });
+    await fsp.rm(sessionDir, { recursive: true, force: true });
   }
 
-  finalizeSession(sessionId: string): void {
+  async finalizeSession(sessionId: string): Promise<void> {
     this.validateSessionId(sessionId);
-    const metadata = this.readMetadata(sessionId);
+    const metadata = await this.readMetadata(sessionId);
     if (!metadata) {
       throw new Error(`Session not found: ${sessionId}`);
     }
@@ -160,7 +172,7 @@ export class SessionManager {
         (new Date(metadata.stoppedAt).getTime() - new Date(metadata.startedAt).getTime()) / 1000
       );
     }
-    this.writeMetadata(metadata);
+    await this.writeMetadata(metadata);
   }
 }
 

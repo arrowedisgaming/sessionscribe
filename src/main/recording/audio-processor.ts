@@ -19,6 +19,7 @@
 import { spawn } from 'child_process';
 import path from 'path';
 import { resolveBinaryPath } from './binary-resolver';
+import { processTracker } from '../utils/process-tracker';
 
 const SAMPLE_RATE = 48000;
 const CHANNELS = 1;
@@ -34,6 +35,9 @@ export class AudioProcessor {
   }
 
   async pcmToFlac(inputPath: string, outputPath: string): Promise<void> {
+    const TIMEOUT = 5 * 60_000; // 5 minutes
+    const MAX_STDERR = 10240;   // 10KB
+
     return new Promise((resolve, reject) => {
       const proc = spawn(this.getFfmpegPath(), [
         '-f', 's16le',
@@ -43,16 +47,27 @@ export class AudioProcessor {
         '-y',
         outputPath,
       ]);
+      processTracker.track(proc);
 
       let stderr = '';
-      proc.stderr.on('data', (data) => { stderr += data.toString(); });
+      proc.stderr.on('data', (data) => {
+        stderr += data.toString();
+        if (stderr.length > MAX_STDERR) stderr = stderr.slice(-MAX_STDERR);
+      });
+
+      const timer = setTimeout(() => {
+        proc.kill('SIGTERM');
+        reject(new Error(`ffmpeg timed out after ${TIMEOUT / 1000}s`));
+      }, TIMEOUT);
 
       proc.on('close', (code) => {
+        clearTimeout(timer);
         if (code === 0) resolve();
         else reject(new Error(`ffmpeg exited with code ${code}: ${stderr}`));
       });
 
       proc.on('error', (err) => {
+        clearTimeout(timer);
         reject(new Error(`ffmpeg spawn error: ${err.message}`));
       });
     });
@@ -65,10 +80,13 @@ export class AudioProcessor {
     if (inputPaths.length === 0) return;
     if (inputPaths.length === 1) {
       // Just copy the single file
-      const fs = require('fs');
-      fs.copyFileSync(inputPaths[0], outputPath);
+      const fsp = require('fs/promises');
+      await fsp.copyFile(inputPaths[0], outputPath);
       return;
     }
+
+    const TIMEOUT = 5 * 60_000;
+    const MAX_STDERR = 10240;
 
     return new Promise((resolve, reject) => {
       const inputs: string[] = [];
@@ -84,16 +102,27 @@ export class AudioProcessor {
         '-y',
         outputPath,
       ]);
+      processTracker.track(proc);
 
       let stderr = '';
-      proc.stderr.on('data', (data) => { stderr += data.toString(); });
+      proc.stderr.on('data', (data) => {
+        stderr += data.toString();
+        if (stderr.length > MAX_STDERR) stderr = stderr.slice(-MAX_STDERR);
+      });
+
+      const timer = setTimeout(() => {
+        proc.kill('SIGTERM');
+        reject(new Error(`ffmpeg mix timed out after ${TIMEOUT / 1000}s`));
+      }, TIMEOUT);
 
       proc.on('close', (code) => {
+        clearTimeout(timer);
         if (code === 0) resolve();
         else reject(new Error(`ffmpeg mix exited with code ${code}: ${stderr}`));
       });
 
       proc.on('error', (err) => {
+        clearTimeout(timer);
         reject(new Error(`ffmpeg spawn error: ${err.message}`));
       });
     });

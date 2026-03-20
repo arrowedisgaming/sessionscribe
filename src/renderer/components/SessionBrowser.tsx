@@ -33,6 +33,88 @@ const statusColors: Record<string, string> = {
   error: 'bg-red-600',
 };
 
+interface SessionRowProps {
+  session: {
+    id: string;
+    campaign?: string;
+    guildName: string;
+    channelName: string;
+    startedAt: string;
+    durationSeconds?: number;
+    status: string;
+    transcriptCount: number;
+  };
+  isSelected: boolean;
+  onSelect: (id: string) => void;
+  onViewTranscript: (id: string) => void;
+  onTranscribe: (id: string) => void;
+  onOpenFolder: (id: string) => void;
+  onDelete: (id: string) => void;
+}
+
+const SessionRow = React.memo<SessionRowProps>(({
+  session, isSelected, onSelect, onViewTranscript, onTranscribe, onOpenFolder, onDelete,
+}) => (
+  <div
+    onClick={() => onSelect(session.id)}
+    className={`p-4 rounded-lg border cursor-pointer transition-colors ${
+      isSelected
+        ? 'border-indigo-500 bg-gray-800'
+        : 'border-gray-700 bg-gray-800/50 hover:bg-gray-800'
+    }`}
+  >
+    <div className="flex items-center justify-between">
+      <div>
+        <div className="flex items-center gap-2">
+          <span className={`w-2 h-2 rounded-full ${statusColors[session.status] || 'bg-gray-500'}`} />
+          <span className="font-medium text-gray-100">
+            {session.campaign || session.guildName}
+          </span>
+          <span className="text-sm text-gray-500">#{session.channelName}</span>
+        </div>
+        <div className="text-sm text-gray-400 mt-1">
+          {formatDate(session.startedAt)} &middot; {formatDuration(session.durationSeconds)}
+          {session.transcriptCount > 0 && (
+            <span className="ml-2 text-indigo-400">
+              {session.transcriptCount} transcript{session.transcriptCount !== 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="flex gap-2">
+        {session.transcriptCount > 0 && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onViewTranscript(session.id); }}
+            className="px-3 py-1 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-500"
+          >
+            View Transcript
+          </button>
+        )}
+        {session.status === 'recorded' && session.transcriptCount === 0 && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onTranscribe(session.id); }}
+            className="px-3 py-1 text-sm bg-indigo-600/70 text-white rounded hover:bg-indigo-500"
+          >
+            Transcribe
+          </button>
+        )}
+        <button
+          onClick={(e) => { e.stopPropagation(); onOpenFolder(session.id); }}
+          className="px-3 py-1 text-sm bg-gray-700 text-gray-300 rounded hover:bg-gray-600"
+        >
+          Open Folder
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(session.id); }}
+          className="px-3 py-1 text-sm bg-red-900/50 text-red-400 rounded hover:bg-red-800/50"
+        >
+          Delete
+        </button>
+      </div>
+    </div>
+  </div>
+));
+
 export const SessionBrowser: React.FC = () => {
   const dispatch = useAppDispatch();
   const { sessions, selectedSessionId, loading } = useAppSelector((s) => s.sessions);
@@ -69,7 +151,11 @@ export const SessionBrowser: React.FC = () => {
     }
   }, [transcriptionStatus, loadSessions]);
 
-  const handleDeleteSession = async (sessionId: string) => {
+  const handleSelect = useCallback((sessionId: string) => {
+    dispatch(setSelectedSession(sessionId));
+  }, [dispatch]);
+
+  const handleDeleteSession = useCallback(async (sessionId: string) => {
     if (!confirm('Delete this session? This removes all audio files and transcripts permanently.')) {
       return;
     }
@@ -80,13 +166,13 @@ export const SessionBrowser: React.FC = () => {
     } else {
       showToast(result.error || 'Failed to delete session', 'error');
     }
-  };
+  }, [loadSessions]);
 
-  const handleOpenFolder = async (sessionId: string) => {
+  const handleOpenFolder = useCallback(async (sessionId: string) => {
     await window.electronAPI.sessionsOpenFolder(sessionId);
-  };
+  }, []);
 
-  const handleViewTranscript = async (sessionId: string) => {
+  const handleViewTranscript = useCallback(async (sessionId: string) => {
     const meta = await window.electronAPI.sessionsGet(sessionId) as {
       transcripts?: { filename: string; createdAt: string }[];
     };
@@ -100,9 +186,9 @@ export const SessionBrowser: React.FC = () => {
     if (result.success && result.content) {
       setViewingTranscript({ content: result.content, filename: sorted[0].filename });
     }
-  };
+  }, []);
 
-  const handleTranscribe = async (sessionId: string) => {
+  const handleTranscribe = useCallback(async (sessionId: string) => {
     const engine = await window.electronAPI.configGet('transcriptionEngine') as string;
     const model = await window.electronAPI.configGet('whisperModel') as string;
 
@@ -116,7 +202,7 @@ export const SessionBrowser: React.FC = () => {
     }
 
     window.electronAPI.transcriptionStart(sessionId, { engine, model });
-  };
+  }, []);
 
   if (loading) {
     return (
@@ -159,65 +245,16 @@ export const SessionBrowser: React.FC = () => {
 
       <div className="space-y-2">
         {sessions.map((session) => (
-          <div
+          <SessionRow
             key={session.id}
-            onClick={() => dispatch(setSelectedSession(session.id))}
-            className={`p-4 rounded-lg border cursor-pointer transition-colors ${
-              selectedSessionId === session.id
-                ? 'border-indigo-500 bg-gray-800'
-                : 'border-gray-700 bg-gray-800/50 hover:bg-gray-800'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className={`w-2 h-2 rounded-full ${statusColors[session.status] || 'bg-gray-500'}`} />
-                  <span className="font-medium text-gray-100">
-                    {session.campaign || session.guildName}
-                  </span>
-                  <span className="text-sm text-gray-500">#{session.channelName}</span>
-                </div>
-                <div className="text-sm text-gray-400 mt-1">
-                  {formatDate(session.startedAt)} &middot; {formatDuration(session.durationSeconds)}
-                  {session.transcriptCount > 0 && (
-                    <span className="ml-2 text-indigo-400">
-                      {session.transcriptCount} transcript{session.transcriptCount !== 1 ? 's' : ''}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="flex gap-2">
-                {session.transcriptCount > 0 && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleViewTranscript(session.id); }}
-                    className="px-3 py-1 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-500"
-                  >
-                    View Transcript
-                  </button>
-                )}
-                {session.status === 'recorded' && session.transcriptCount === 0 && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleTranscribe(session.id); }}
-                    className="px-3 py-1 text-sm bg-indigo-600/70 text-white rounded hover:bg-indigo-500"
-                  >
-                    Transcribe
-                  </button>
-                )}
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleOpenFolder(session.id); }}
-                  className="px-3 py-1 text-sm bg-gray-700 text-gray-300 rounded hover:bg-gray-600"
-                >
-                  Open Folder
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleDeleteSession(session.id); }}
-                  className="px-3 py-1 text-sm bg-red-900/50 text-red-400 rounded hover:bg-red-800/50"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          </div>
+            session={session}
+            isSelected={selectedSessionId === session.id}
+            onSelect={handleSelect}
+            onViewTranscript={handleViewTranscript}
+            onTranscribe={handleTranscribe}
+            onOpenFolder={handleOpenFolder}
+            onDelete={handleDeleteSession}
+          />
         ))}
       </div>
     </div>

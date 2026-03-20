@@ -25,6 +25,7 @@ import { detectSpeechSegments, batchSegments, SpeechSegment } from './vad';
 import { resolveBinaryPath } from '../recording/binary-resolver';
 import { modelManager } from '../models/model-manager';
 import { config } from '../config';
+import { processTracker } from '../utils/process-tracker';
 
 export class WhisperCppEngine implements TranscriptionEngine {
   name = 'whisper-cpp';
@@ -94,6 +95,7 @@ export class WhisperCppEngine implements TranscriptionEngine {
         '-ar', '16000', '-ac', '1', '-f', 'wav',
         '-y', outputPath,
       ]);
+      processTracker.track(proc);
       proc.on('close', (code) => code === 0 ? resolve() : reject(new Error(`ffmpeg exit ${code}`)));
       proc.on('error', reject);
     });
@@ -114,6 +116,7 @@ export class WhisperCppEngine implements TranscriptionEngine {
         '-ar', '16000', '-ac', '1', '-f', 'wav',
         '-y', outputPath,
       ]);
+      processTracker.track(proc);
       proc.on('close', (code) => code === 0 ? resolve() : reject(new Error(`ffmpeg exit ${code}`)));
       proc.on('error', reject);
     });
@@ -147,12 +150,30 @@ export class WhisperCppEngine implements TranscriptionEngine {
       args.push('--prompt', sanitizedPrompt);
     }
 
+    const TIMEOUT = 10 * 60_000; // 10 minutes
+    const MAX_STDERR = 10240;
+
     return new Promise((resolve, reject) => {
       const proc = spawn(whisperPath, args);
+      processTracker.track(proc);
+
       let stderr = '';
-      proc.stderr.on('data', (d) => { stderr += d.toString(); });
-      proc.on('error', reject);
+      proc.stderr.on('data', (d) => {
+        stderr += d.toString();
+        if (stderr.length > MAX_STDERR) stderr = stderr.slice(-MAX_STDERR);
+      });
+
+      const timer = setTimeout(() => {
+        proc.kill('SIGTERM');
+        reject(new Error(`whisper-cli timed out after ${TIMEOUT / 1000}s`));
+      }, TIMEOUT);
+
+      proc.on('error', (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
       proc.on('close', (code) => {
+        clearTimeout(timer);
         if (code !== 0) {
           reject(new Error(`whisper-cli exit ${code}: ${stderr}`));
           return;

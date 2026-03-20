@@ -19,6 +19,9 @@
 import { app, BrowserWindow, nativeImage, session } from 'electron';
 import * as path from 'path';
 import { registerIpcHandlers } from './ipc-handlers';
+import { sessionRecorder } from './recording/recorder';
+import { discordConnection } from './discord/connection';
+import { processTracker } from './utils/process-tracker';
 
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
@@ -79,6 +82,45 @@ app.on('ready', () => {
 
   registerIpcHandlers();
   createWindow();
+});
+
+let isShuttingDown = false;
+
+app.on('before-quit', async (event) => {
+  if (isShuttingDown) return;
+
+  if (sessionRecorder.recording) {
+    event.preventDefault();
+    isShuttingDown = true;
+
+    try {
+      await sessionRecorder.stop();
+    } catch (err) {
+      console.error('Failed to stop recording during shutdown:', err);
+      // Mark session as incomplete if stop() fails
+      const session = sessionRecorder.currentSession;
+      if (session) {
+        session.status = 'incomplete';
+        const { sessionManager } = require('./sessions/session-manager');
+        try { await sessionManager.writeMetadata(session); } catch { /* best effort */ }
+      }
+    }
+
+    processTracker.killAll();
+
+    try {
+      await discordConnection.disconnect();
+    } catch { /* best effort */ }
+
+    app.quit();
+    return;
+  }
+
+  // Not recording — just clean up
+  processTracker.killAll();
+  try {
+    await discordConnection.disconnect();
+  } catch { /* best effort */ }
 });
 
 app.on('window-all-closed', () => {

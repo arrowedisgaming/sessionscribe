@@ -35,7 +35,11 @@ function sendToRenderer(channel: string, ...args: unknown[]): void {
   }
 }
 
+let registered = false;
+
 export function registerIpcHandlers(): void {
+  if (registered) return;
+  registered = true;
   // ── Config ──────────────────────────────────
   ipcMain.handle(ch.CONFIG_GET, (_event, key: string) => {
     return config.get(key as keyof AppConfig);
@@ -194,7 +198,7 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(ch.SESSIONS_DELETE, async (_event, sessionId: string) => {
     try {
-      sessionManager.deleteSession(sessionId);
+      await sessionManager.deleteSession(sessionId);
       return { success: true };
     } catch (err) {
       return { success: false, error: (err as Error).message };
@@ -203,7 +207,7 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(ch.SESSIONS_FINALIZE, async (_event, sessionId: string) => {
     try {
-      sessionManager.finalizeSession(sessionId);
+      await sessionManager.finalizeSession(sessionId);
       return { success: true };
     } catch (err) {
       return { success: false, error: (err as Error).message };
@@ -219,7 +223,7 @@ export function registerIpcHandlers(): void {
       if (!resolved.startsWith(path.resolve(sessionDir) + path.sep) && resolved !== path.resolve(sessionDir)) {
         return { success: false, error: 'Invalid filename' };
       }
-      const content = fs.readFileSync(resolved, 'utf-8');
+      const content = await fs.promises.readFile(resolved, 'utf-8');
       return { success: true, content };
     } catch (err) {
       return { success: false, error: (err as Error).message };

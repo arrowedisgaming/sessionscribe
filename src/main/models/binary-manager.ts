@@ -373,7 +373,8 @@ export class BinaryManager extends EventEmitter {
             if (
               response.statusCode === 301 ||
               response.statusCode === 302 ||
-              response.statusCode === 307
+              response.statusCode === 307 ||
+              response.statusCode === 308
             ) {
               const location = response.headers.location;
               if (!location) {

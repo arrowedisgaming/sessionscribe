@@ -1,7 +1,7 @@
 {
   "name": "session-scribe",
   "productName": "Session Scribe",
-  "version": "0.2.10-alpha",
+  "version": "0.3.0-alpha",
   "description": "TTRPG session recording and transcription for Discord",
   "main": ".webpack/main",
   "private": true,
@@ -13,7 +13,9 @@
     "make:arm64": "electron-forge make --arch arm64",
     "publish": "electron-forge publish",
     "lint": "eslint --ext .ts,.tsx .",
-    "download-binaries": "npx ts-node scripts/download-binaries.ts"
+    "download-binaries": "npx ts-node scripts/download-binaries.ts",
+    "test": "jest",
+    "test:watch": "jest --watch"
   },
   "keywords": [],
   "author": {
@@ -33,6 +35,7 @@
     "@electron-forge/plugin-webpack": "^7.11.1",
     "@electron-forge/publisher-github": "^7.11.1",
     "@electron/fuses": "^1.8.0",
+    "@types/jest": "^30.0.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@typescript-eslint/eslint-plugin": "^5.62.0",
@@ -44,11 +47,13 @@
     "eslint": "^8.57.1",
     "eslint-plugin-import": "^2.32.0",
     "fork-ts-checker-webpack-plugin": "^7.3.0",
+    "jest": "^30.3.0",
     "node-loader": "^2.1.0",
     "postcss": "^8.5.8",
     "postcss-loader": "^8.2.1",
     "style-loader": "^3.3.4",
     "tailwindcss": "^3.4.19",
+    "ts-jest": "^29.4.6",
     "ts-loader": "^9.5.4",
     "typescript": "~4.5.4"
   },

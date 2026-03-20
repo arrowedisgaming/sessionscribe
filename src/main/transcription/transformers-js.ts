@@ -24,8 +24,11 @@ export class TransformersJsEngine implements TranscriptionEngine {
     const modelId = config.get('whisperModel') || 'base';
     const cacheDir = path.join(app.getPath('userData'), 'models', 'transformers');
 
+    const TIMEOUT = 10 * 60_000; // 10 minutes
+
     return new Promise((resolve, reject) => {
       const workerPath = path.join(__dirname, 'transformers-worker.js');
+      let settled = false;
 
       const worker = new Worker(workerPath, {
         workerData: {
@@ -37,19 +40,42 @@ export class TransformersJsEngine implements TranscriptionEngine {
         },
       });
 
+      const timer = setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          worker.terminate();
+          reject(new Error(`transformers.js worker timed out after ${TIMEOUT / 1000}s`));
+        }
+      }, TIMEOUT);
+
       worker.on('message', (msg: { type: string; segments?: TranscriptionSegment[]; error?: string }) => {
+        if (settled) return;
         if (msg.type === 'result') {
+          settled = true;
+          clearTimeout(timer);
           resolve(msg.segments || []);
           worker.terminate();
         } else if (msg.type === 'error') {
+          settled = true;
+          clearTimeout(timer);
           reject(new Error(msg.error));
           worker.terminate();
         }
       });
 
-      worker.on('error', reject);
+      worker.on('error', (err) => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          reject(err);
+        }
+      });
       worker.on('exit', (code) => {
-        if (code !== 0) reject(new Error(`Worker exited with code ${code}`));
+        if (!settled && code !== 0) {
+          settled = true;
+          clearTimeout(timer);
+          reject(new Error(`Worker exited with code ${code}`));
+        }
       });
     });
   }
