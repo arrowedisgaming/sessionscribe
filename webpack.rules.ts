@@ -19,6 +19,10 @@ export const rules: Required<ModuleOptions>['rules'] = [
     },
   },
   {
+    test: /\.(woff|woff2|eot|ttf|otf)$/,
+    type: 'asset/resource',
+  },
+  {
     test: /\.tsx?$/,
     exclude: /(node_modules|\.webpack)/,
     use: {
