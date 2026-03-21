@@ -21,5 +21,6 @@ export const mainConfig: Configuration = {
     'zlib-sync': 'commonjs2 zlib-sync',
     'bufferutil': 'commonjs2 bufferutil',
     'utf-8-validate': 'commonjs2 utf-8-validate',
+    '@snazzah/davey': 'commonjs2 @snazzah/davey',
   },
 };
