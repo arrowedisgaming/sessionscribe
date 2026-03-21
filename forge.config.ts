@@ -164,7 +164,9 @@ const config: ForgeConfig = {
     },
   },
   makers: [
-    new MakerSquirrel({}),
+    new MakerSquirrel({
+      name: 'SessionScribe',
+    }),
     new MakerZIP({}),
     new MakerDMG({
       format: 'ULFO',
